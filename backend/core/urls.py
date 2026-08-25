@@ -1,6 +1,7 @@
+from django.contrib import admin
 from django.urls import path, include
 
 urlpatterns = [
-    # path('admin/', admin.site.urls),  # Removed because admin app is disabled
+    path('admin/', admin.site.urls),
     path('api/auth/', include('authentication.urls')),
 ]
