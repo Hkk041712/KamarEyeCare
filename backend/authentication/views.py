@@ -8,6 +8,9 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from .models import User
+from .models import Product, Sale
+from .models import Product, Sale
+import random
 
 ALLOWED_DOMAINS = {
     'gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com',
@@ -225,3 +228,221 @@ def login_view(request):
 
     except User.DoesNotExist:
         return Response({'error': 'Invalid email or password.'}, status=status.HTTP_400_BAD_REQUEST)
+    
+
+def generate_product_id():
+    while True:
+        prod_id = f"PRD{random.randint(1000, 9999)}"
+        if not Product.objects.filter(id=prod_id).exists():
+            return prod_id
+
+def generate_sale_id():
+    return f"SLS{random.randint(1000, 9999)}"
+
+@api_view(['GET', 'POST'])
+def manage_products(request):
+    if request.method == 'GET':
+        products = Product.objects.all().order_by('-created_at')
+        data = [
+            {
+                "id": p.id,
+                "name": p.name,
+                "category": p.category,
+                "quantity": p.quantity,
+                "buy_price": float(p.buy_price),
+                "sell_price": float(p.sell_price),
+                "created_at": p.created_at.strftime("%Y-%m-%d"),
+            }
+            for p in products
+        ]
+        return Response(data, status=status.HTTP_200_OK)
+
+    elif request.method == 'POST':
+        name = request.data.get('name')
+        category = request.data.get('category')
+        quantity = request.data.get('quantity', 0)
+        buy_price = request.data.get('buy_price', 0.0)
+        sell_price = request.data.get('sell_price', 0.0)
+
+        if not name or not category:
+            return Response({'error': 'Name and Category are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        product = Product.objects.create(
+            id=generate_product_id(),
+            name=name,
+            category=category,
+            quantity=int(quantity),
+            buy_price=float(buy_price),
+            sell_price=float(sell_price)
+        )
+        return Response({'message': 'Product added successfully!', 'id': product.id}, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET', 'POST'])
+def manage_sales(request):
+    if request.method == 'GET':
+        sales = Sale.objects.all().order_by('-created_at')
+        data = [
+            {
+                "id": s.id,
+                "product_id": s.product.id,
+                "product_name": s.product.name,
+                "quantity": s.quantity,
+                "unit_price": float(s.unit_price),
+                "total": float(s.total),
+                "created_at": s.created_at.strftime("%Y-%m-%d"),
+            }
+            for s in sales
+        ]
+        return Response(data, status=status.HTTP_200_OK)
+
+    elif request.method == 'POST':
+        product_id = request.data.get('product_id')
+        qty = int(request.data.get('quantity', 1))
+
+        try:
+            product = Product.objects.get(id=product_id)
+            if product.quantity < qty:
+                return Response({'error': 'Insufficient stock available.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            unit_price = float(product.sell_price)
+            total = unit_price * qty
+
+            # Deduct stock
+            product.quantity -= qty
+            product.save()
+
+            sale = Sale.objects.create(
+                id=generate_sale_id(),
+                product=product,
+                quantity=qty,
+                unit_price=unit_price,
+                total=total
+            )
+            return Response({'message': 'Sale recorded successfully!', 'id': sale.id}, status=status.HTTP_201_CREATED)
+        except Product.DoesNotExist:
+            return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Product, Sale
+import random
+
+def generate_product_id():
+    while True:
+        prod_id = f"PRD{random.randint(1000, 9999)}"
+        if not Product.objects.filter(id=prod_id).exists():
+            return prod_id
+
+def generate_sale_id():
+    while True:
+        sale_id = f"SLS{random.randint(1000, 9999)}"
+        if not Sale.objects.filter(id=sale_id).exists():
+            return sale_id
+
+@api_view(['GET', 'POST', 'DELETE'])
+def manage_products(request, product_id=None):
+    if request.method == 'GET':
+        products = Product.objects.all().order_by('-created_at')
+        data = [
+            {
+                "id": p.id,
+                "name": p.name,
+                "category": p.category,
+                "quantity": p.quantity,
+                "buy_price": float(p.buy_price),
+                "sell_price": float(p.sell_price),
+                "created_at": p.created_at.strftime("%Y-%m-%d"),
+            }
+            for p in products
+        ]
+        return Response(data, status=status.HTTP_200_OK)
+
+    elif request.method == 'POST':
+        name = request.data.get('name')
+        category = request.data.get('category')
+        quantity = request.data.get('quantity', 0)
+        buy_price = request.data.get('buy_price', 0.0)
+        sell_price = request.data.get('sell_price', 0.0)
+
+        if not name or not category:
+            return Response({'error': 'Name and Category are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        product = Product.objects.create(
+            id=generate_product_id(),
+            name=name,
+            category=category,
+            quantity=int(quantity),
+            buy_price=float(buy_price),
+            sell_price=float(sell_price)
+        )
+        return Response({'message': 'Product added successfully!', 'id': product.id}, status=status.HTTP_201_CREATED)
+
+    elif request.method == 'DELETE':
+        if not product_id:
+            return Response({'error': 'Product ID is required for deletion.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            product = Product.objects.get(id=product_id)
+            product.delete()
+            return Response({'message': f'Product {product_id} deleted successfully.'}, status=status.HTTP_200_OK)
+        except Product.DoesNotExist:
+            return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET', 'POST'])
+def manage_sales(request):
+    if request.method == 'GET':
+        sales = Sale.objects.all().order_by('-created_at')
+        data = [
+            {
+                "id": s.id,
+                "product_id": s.product.id,
+                "product_name": s.product.name,
+                "category": s.product.category,
+                "quantity": s.quantity,
+                "unit_price": float(s.unit_price),
+                "total": float(s.total),
+                "created_at": s.created_at.strftime("%Y-%m-%d"),
+            }
+            for s in sales
+        ]
+        return Response(data, status=status.HTTP_200_OK)
+
+    elif request.method == 'POST':
+        product_id = request.data.get('product_id')
+        qty = int(request.data.get('quantity', 1))
+        custom_price = request.data.get('unit_price')
+        sale_date = request.data.get('created_at')
+
+        try:
+            product = Product.objects.get(id=product_id)
+            
+            if product.quantity < qty:
+                return Response({'error': f'Insufficient stock. Only {product.quantity} units remaining.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            unit_price = float(custom_price) if custom_price is not None else float(product.sell_price)
+            total = unit_price * qty
+
+            # 1. Deduct stock from product
+            product.quantity -= qty
+            product.save()
+
+            # 2. Record sale
+            sale = Sale.objects.create(
+                id=generate_sale_id(),
+                product=product,
+                quantity=qty,
+                unit_price=unit_price,
+                total=total
+            )
+
+            # Override created_at if custom date is passed
+            if sale_date:
+                sale.created_at = sale_date
+                sale.save()
+
+            return Response({'message': 'Income transaction recorded successfully!', 'id': sale.id}, status=status.HTTP_201_CREATED)
+            
+        except Product.DoesNotExist:
+            return Response({'error': 'Selected product does not exist.'}, status=status.HTTP_404_NOT_FOUND)
