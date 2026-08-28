@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import bgImage from "./assets/eyecare-bg.jpg";
+import ManageProducts from "./ManageProducts";
 import "./App.css";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api/auth";
@@ -273,6 +274,11 @@ export default function App() {
     u.username.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // If full screen Manage Products view is active:
+  if (view === "manage-products") {
+    return <ManageProducts onBack={() => setView("dashboard")} />;
+  }
+
   return (
     <div
       className="auth-page-wrapper"
@@ -373,6 +379,7 @@ export default function App() {
               <button
                 className="btn-primary"
                 style={{ textAlign: "left", padding: "0.75rem 1rem" }}
+                onClick={() => setView("manage-products")}
               >
                 <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
                   Manage Products
