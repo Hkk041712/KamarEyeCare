@@ -1,12 +1,84 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import axios from "axios";
 import bgImage from "./assets/eyecare-bg.jpg";
 import ManageProducts from "./ManageProducts";
+import ManagePatients from "./ManagePatients";
+import ManageExpenses from "./ManageExpenses";
 import "./App.css";
 
-const API_BASE_URL = "http://127.0.0.1:8000/api/auth";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/auth";
 
-// Reusable Brand Header
+// Axios request interceptor: attach Bearer JWT
+axios.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("accessToken");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Axios response interceptor: silent JWT refresh on 401
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      const refreshToken = localStorage.getItem("refreshToken");
+      if (refreshToken) {
+        try {
+          const res = await axios.post(`${API_BASE_URL}/token/refresh/`, {
+            refresh: refreshToken,
+          });
+          const newAccessToken = res.data.access;
+          localStorage.setItem("accessToken", newAccessToken);
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+          return axios(originalRequest);
+        } catch (refreshErr) {
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refreshToken");
+          window.location.reload();
+          return Promise.reject(refreshErr);
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Eye Icons
+const EyeOpenIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const EyeClosedIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+    <line x1="1" y1="1" x2="23" y2="23" />
+  </svg>
+);
+
 const BrandHeader = ({ subtitle }) => (
   <div className="brand-header">
     <svg className="eye-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -31,114 +103,33 @@ const BrandHeader = ({ subtitle }) => (
 );
 
 export default function App() {
-  const [rememberMe, setRememberMe] = useState(() => {
-    return localStorage.getItem("rememberMe") === "true";
-  });
-
-  const [username, setUsername] = useState(() => {
-    return localStorage.getItem("savedUsername") || "";
-  });
-
+  const [rememberMe, setRememberMe] = useState(
+    () => localStorage.getItem("rememberMe") === "true"
+  );
+  const [username, setUsername] = useState(
+    () => localStorage.getItem("savedUsername") || ""
+  );
   const [password, setPassword] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
 
-  const [view, setView] = useState(() => {
-    const savedView =
-      localStorage.getItem("appView") || sessionStorage.getItem("appView");
-    return savedView || "login";
-  });
+  const [resetStep, setResetStep] = useState(1);
+  const [resetEmail, setResetEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  const [view, setView] = useState(() =>
+    localStorage.getItem("accessToken") ? "dashboard" : "login"
+  );
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
 
-  // Dynamic Users State from DB
-  const [users, setUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-
-  // Add User & Verification State
-  const [newEmail, setNewEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [verifyCode, setVerifyCode] = useState("");
-  const [addStep, setAddStep] = useState(1);
-  const [addStatus, setAddStatus] = useState("");
-  const [isAddError, setIsAddError] = useState(false);
-
-  // Sync active view to storage
-  useEffect(() => {
-    if (rememberMe) {
-      localStorage.setItem("appView", view);
-    } else {
-      sessionStorage.setItem("appView", view);
-    }
-  }, [view, rememberMe]);
-
-  // Fetch registered users
-  const fetchUsers = useCallback(async () => {
-    setLoadingUsers(true);
-    try {
-      const res = await axios.get(
-        `${API_BASE_URL}/users/?t=${new Date().getTime()}`
-      );
-      setUsers(res.data);
-    } catch (err) {
-      console.error("Error fetching users:", err);
-    } finally {
-      setLoadingUsers(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (view === "manage-users" || view === "view-users") {
-      let isMounted = true;
-      const loadUsers = async () => {
-        if (isMounted) {
-          await fetchUsers();
-        }
-      };
-      loadUsers();
-
-      return () => {
-        isMounted = false;
-      };
-    }
-  }, [view, fetchUsers]);
-
-  const validatePasswordConditions = (pass) => {
-    if (pass.length < 8) return "Password must be at least 8 characters long.";
-    if (!/[A-Z]/.test(pass))
-      return "Password must contain at least one uppercase letter (A-Z).";
-    if (!/[a-z]/.test(pass))
-      return "Password must contain at least one lowercase letter (a-z).";
-    if (!/[0-9]/.test(pass))
-      return "Password must contain at least one number (0-9).";
-    return null;
-  };
-
   const validateEmailFormat = (email) => {
-    const lower = email.toLowerCase();
-    const validDomains = [
-      "@gmail.com",
-      "@outlook.com",
-      "@hotmail.com",
-      "@yahoo.com",
-      "@icloud.com",
-      "@aol.com",
-      "@proton.me",
-      "@protonmail.com",
-      "@mail.com",
-      "@gmx.com",
-      "@zoho.com",
-      "@yandex.com",
-      "@live.com",
-      "@msn.com",
-      "@me.com",
-      "@mac.com",
-      "@fastmail.com",
-      "@tutanota.com",
-      "@hey.com",
-    ];
-    if (!validDomains.some((domain) => lower.includes(domain))) {
-      return "Email must match a valid domain.";
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return "Please enter a valid email address.";
     }
     return null;
   };
@@ -150,13 +141,18 @@ export default function App() {
 
     const emailError = validateEmailFormat(username);
     if (emailError) {
-      setMessage(emailError);
+      setMessage(`Validation Error: ${emailError}`);
       setIsError(true);
       return;
     }
 
     try {
-      await axios.post(`${API_BASE_URL}/login/`, { username, password });
+      const res = await axios.post(`${API_BASE_URL}/login/`, {
+        username,
+        password,
+      });
+      localStorage.setItem("accessToken", res.data.access);
+      localStorage.setItem("refreshToken", res.data.refresh);
 
       if (rememberMe) {
         localStorage.setItem("rememberMe", "true");
@@ -168,116 +164,89 @@ export default function App() {
 
       setView("dashboard");
       setMessage("");
-      setIsError(false);
     } catch (err) {
       setMessage(
-        err.response?.data?.error || "Connection error with the server."
+        err.response?.data?.error || "Login failed. Check your credentials."
+      );
+      setIsError(true);
+    }
+  };
+
+  const handleRequestOTP = async (e) => {
+    e.preventDefault();
+    setMessage("");
+    setIsError(false);
+
+    const emailError = validateEmailFormat(resetEmail);
+    if (emailError) {
+      setMessage(`Validation Error: ${emailError}`);
+      setIsError(true);
+      return;
+    }
+
+    try {
+      const res = await axios.post(`${API_BASE_URL}/request-reset-otp/`, {
+        username: resetEmail,
+      });
+      setMessage(res.data.message);
+      setResetStep(2);
+    } catch (err) {
+      setMessage(err.response?.data?.error || "Failed to send OTP code.");
+      setIsError(true);
+    }
+  };
+
+  const handleConfirmReset = async (e) => {
+    e.preventDefault();
+    setMessage("");
+    setIsError(false);
+
+    if (newPassword !== confirmPassword) {
+      setMessage("Passwords do not match.");
+      setIsError(true);
+      return;
+    }
+
+    try {
+      await axios.post(`${API_BASE_URL}/confirm-reset/`, {
+        username: resetEmail,
+        otp: otpCode,
+        new_password: newPassword,
+      });
+
+      setMessage("Password updated successfully! You can now log in.");
+      setIsError(false);
+      setTimeout(() => {
+        setResetStep(1);
+        setView("login");
+      }, 2000);
+    } catch (err) {
+      setMessage(
+        err.response?.data?.error || "Reset failed. Invalid or expired OTP."
       );
       setIsError(true);
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("appView");
-    sessionStorage.removeItem("appView");
-
-    if (!rememberMe) {
-      setUsername("");
-    }
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    if (!rememberMe) setUsername("");
     setPassword("");
     setView("login");
   };
 
-  // Step 1: Send Verification Code
-  const handleSendVerificationCode = async (e) => {
-    e.preventDefault();
-    setAddStatus("");
-    setIsAddError(false);
-
-    const emailErr = validateEmailFormat(newEmail);
-    if (emailErr) {
-      setAddStatus(emailErr);
-      setIsAddError(true);
-      return;
-    }
-
-    const passErr = validatePasswordConditions(newPassword);
-    if (passErr) {
-      setAddStatus(passErr);
-      setIsAddError(true);
-      return;
-    }
-
-    try {
-      await axios.post(`${API_BASE_URL}/send-code/`, {
-        username: newEmail,
-        password: newPassword,
-      });
-
-      setAddStep(2);
-      setAddStatus("Verification code sent to email! Valid for 3 minutes.");
-      setIsAddError(false);
-    } catch (err) {
-      setAddStatus(err.response?.data?.error || "Failed to send code.");
-      setIsAddError(true);
-    }
-  };
-
-  // Step 2: Confirm Verification Code
-  const handleVerifyCode = async (e) => {
-    e.preventDefault();
-    setAddStatus("");
-    setIsAddError(false);
-
-    try {
-      const res = await axios.post(`${API_BASE_URL}/verify-user/`, {
-        username: newEmail,
-        code: verifyCode,
-      });
-
-      setAddStatus(res.data.message || "User verified and registered!");
-      setIsAddError(false);
-
-      setTimeout(() => {
-        resetAddUserForm();
-        setView("manage-users");
-      }, 1500);
-    } catch (err) {
-      setAddStatus(err.response?.data?.error || "Verification failed.");
-      setIsAddError(true);
-    }
-  };
-
-  const handleRemoveUser = async (userId) => {
-    try {
-      await axios.delete(`${API_BASE_URL}/users/${userId}/`);
-      await fetchUsers();
-    } catch (error) {
-      if (error.response && error.response.status === 404) {
-        await fetchUsers();
-      } else {
-        console.error("Delete request failed:", error);
-      }
-    }
-  };
-
-  const resetAddUserForm = () => {
-    setNewEmail("");
-    setNewPassword("");
-    setVerifyCode("");
-    setAddStep(1);
-    setAddStatus("");
-    setIsAddError(false);
-  };
-
-  const filteredUsers = users.filter((u) =>
-    u.username.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // If full screen Manage Products view is active:
-  if (view === "manage-products") {
+  if (view === "manage-products")
     return <ManageProducts onBack={() => setView("dashboard")} />;
-  }
+  if (view === "manage-patients")
+    return <ManagePatients onBack={() => setView("dashboard")} />;
+  if (view === "manage-expenses")
+    return (
+      <ManageExpenses
+        onBack={() => setView("dashboard")}
+        currentUser={username}
+      />
+    );
 
   return (
     <div
@@ -287,7 +256,6 @@ export default function App() {
       }}
     >
       <div className="auth-card">
-        {/* LOGIN VIEW */}
         {view === "login" && (
           <>
             <BrandHeader />
@@ -295,13 +263,18 @@ export default function App() {
               <h2 className="form-subtitle">Portal Login</h2>
 
               {message && (
-                <p
+                <div
                   className={
                     isError ? "status-msg error-msg" : "status-msg success-msg"
                   }
+                  style={{
+                    wordBreak: "break-word",
+                    fontSize: "0.8rem",
+                    textAlign: "left",
+                  }}
                 >
                   {message}
-                </p>
+                </div>
               )}
 
               <div className="input-group">
@@ -318,43 +291,81 @@ export default function App() {
 
               <div className="input-group">
                 <label className="input-label">Password</label>
-                <input
-                  type="password"
-                  className="auth-input"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  required
-                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showLoginPassword ? "text" : "password"}
+                    className="auth-input"
+                    style={{ paddingRight: "2.5rem" }}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword(!showLoginPassword)}
+                    style={{
+                      position: "absolute",
+                      right: "0.75rem",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      color: "#94a3b8",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {showLoginPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
+                  </button>
+                </div>
               </div>
 
               <div
                 style={{
                   display: "flex",
+                  justifyContent: "space-between",
                   alignItems: "center",
-                  gap: "0.5rem",
                   margin: "0.2rem 0 0.8rem 0",
-                  cursor: "pointer",
                 }}
               >
-                <input
-                  type="checkbox"
-                  id="rememberMe"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  style={{ cursor: "pointer", accentColor: "#0284c7" }}
-                />
-                <label
-                  htmlFor="rememberMe"
+                <div
                   style={{
-                    fontSize: "0.85rem",
-                    color: "#94a3b8",
-                    cursor: "pointer",
-                    userSelect: "none",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
                   }}
                 >
-                  Remember me
-                </label>
+                  <input
+                    type="checkbox"
+                    id="rememberMe"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    style={{ cursor: "pointer", accentColor: "#0284c7" }}
+                  />
+                  <label
+                    htmlFor="rememberMe"
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "#94a3b8",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                  >
+                    Remember me
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  className="btn-link"
+                  style={{ fontSize: "0.82rem", color: "#38bdf8" }}
+                  onClick={() => {
+                    setMessage("");
+                    setIsError(false);
+                    setView("forgot-password");
+                  }}
+                >
+                  Forgot Password?
+                </button>
               </div>
 
               <button type="submit" className="btn-primary">
@@ -364,7 +375,162 @@ export default function App() {
           </>
         )}
 
-        {/* DASHBOARD VIEW */}
+        {view === "forgot-password" && (
+          <>
+            <BrandHeader subtitle="Reset Access" />
+            {resetStep === 1 ? (
+              <form onSubmit={handleRequestOTP} className="auth-form">
+                <h2 className="form-subtitle">Request Verification Code</h2>
+                {message && (
+                  <div
+                    className={
+                      isError
+                        ? "status-msg error-msg"
+                        : "status-msg success-msg"
+                    }
+                    style={{ fontSize: "0.8rem", textAlign: "left" }}
+                  >
+                    {message}
+                  </div>
+                )}
+                <div className="input-group">
+                  <label className="input-label">Account Email</label>
+                  <input
+                    type="text"
+                    className="auth-input"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  style={{ marginTop: "0.5rem" }}
+                >
+                  Send OTP
+                </button>
+                <button
+                  type="button"
+                  className="btn-link"
+                  style={{ marginTop: "0.4rem", alignSelf: "center" }}
+                  onClick={() => setView("login")}
+                >
+                  Back to Login
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleConfirmReset} className="auth-form">
+                <h2 className="form-subtitle">Enter OTP & New Password</h2>
+                {message && (
+                  <div
+                    className={
+                      isError
+                        ? "status-msg error-msg"
+                        : "status-msg success-msg"
+                    }
+                    style={{ fontSize: "0.8rem", textAlign: "left" }}
+                  >
+                    {message}
+                  </div>
+                )}
+                <div className="input-group">
+                  <label className="input-label">6-Digit OTP Code</label>
+                  <input
+                    type="text"
+                    className="auth-input"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                    placeholder="123456"
+                    maxLength={6}
+                    required
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">New Password</label>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      className="auth-input"
+                      style={{ paddingRight: "2.5rem" }}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter new password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      style={{
+                        position: "absolute",
+                        right: "0.75rem",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        color: "#94a3b8",
+                      }}
+                    >
+                      {showNewPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
+                    </button>
+                  </div>
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Confirm New Password</label>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      className="auth-input"
+                      style={{ paddingRight: "2.5rem" }}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm new password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                      style={{
+                        position: "absolute",
+                        right: "0.75rem",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        color: "#94a3b8",
+                      }}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeClosedIcon />
+                      ) : (
+                        <EyeOpenIcon />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  style={{ marginTop: "0.5rem" }}
+                >
+                  Update Password
+                </button>
+                <button
+                  type="button"
+                  className="btn-link"
+                  style={{ marginTop: "0.4rem", alignSelf: "center" }}
+                  onClick={() => setResetStep(1)}
+                >
+                  Back
+                </button>
+              </form>
+            )}
+          </>
+        )}
+
         {view === "dashboard" && (
           <>
             <BrandHeader subtitle="Management Portal" />
@@ -388,6 +554,7 @@ export default function App() {
               <button
                 className="btn-primary"
                 style={{ textAlign: "left", padding: "0.75rem 1rem" }}
+                onClick={() => setView("manage-expenses")}
               >
                 <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
                   Manage Expenses
@@ -396,18 +563,10 @@ export default function App() {
               <button
                 className="btn-primary"
                 style={{ textAlign: "left", padding: "0.75rem 1rem" }}
+                onClick={() => setView("manage-patients")}
               >
                 <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
                   Manage Patients
-                </span>
-              </button>
-              <button
-                className="btn-primary"
-                style={{ textAlign: "left", padding: "0.75rem 1rem" }}
-                onClick={() => setView("manage-users")}
-              >
-                <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
-                  Manage Users
                 </span>
               </button>
             </div>
@@ -417,268 +576,6 @@ export default function App() {
               onClick={handleLogout}
             >
               Log Out
-            </button>
-          </>
-        )}
-
-        {/* MANAGE USERS MENU VIEW */}
-        {view === "manage-users" && (
-          <>
-            <BrandHeader subtitle="User Management" />
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.75rem",
-                marginTop: "0.5rem",
-              }}
-            >
-              <button
-                className="btn-primary"
-                style={{ textAlign: "center", padding: "0.85rem" }}
-                onClick={() => {
-                  resetAddUserForm();
-                  setView("add-user");
-                }}
-              >
-                + Add User
-              </button>
-              <button
-                className="btn-primary"
-                style={{
-                  textAlign: "center",
-                  padding: "0.85rem",
-                  backgroundColor: "#0284c7",
-                }}
-                onClick={() => {
-                  setSearchTerm("");
-                  setView("view-users");
-                }}
-              >
-                View Users ({users.length})
-              </button>
-            </div>
-            <button
-              className="btn-link"
-              style={{ marginTop: "0.5rem", alignSelf: "center" }}
-              onClick={() => setView("dashboard")}
-            >
-              ← Back to Dashboard
-            </button>
-          </>
-        )}
-
-        {/* ADD USER VIEW WITH VERIFICATION */}
-        {view === "add-user" && (
-          <>
-            <BrandHeader
-              subtitle={addStep === 1 ? "Add New User" : "Email Verification"}
-            />
-
-            {addStatus && (
-              <p
-                className={
-                  isAddError ? "status-msg error-msg" : "status-msg success-msg"
-                }
-              >
-                {addStatus}
-              </p>
-            )}
-
-            {addStep === 1 ? (
-              <form onSubmit={handleSendVerificationCode} className="auth-form">
-                <div className="input-group">
-                  <label className="input-label">Email / Username</label>
-                  <input
-                    type="email"
-                    className="auth-input"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    placeholder="user@eyecare.com"
-                    required
-                  />
-                </div>
-
-                <div className="input-group">
-                  <label className="input-label">Password</label>
-                  <input
-                    type="password"
-                    className="auth-input"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Min 8 chars, uppercase, lowercase, & number"
-                    required
-                  />
-                </div>
-
-                <button type="submit" className="btn-primary">
-                  Send Verification Code
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleVerifyCode} className="auth-form">
-                <div className="input-group">
-                  <label className="input-label">
-                    6-Digit Verification Code
-                  </label>
-                  <input
-                    type="text"
-                    className="auth-input"
-                    value={verifyCode}
-                    onChange={(e) => setVerifyCode(e.target.value)}
-                    placeholder="Enter code sent to email"
-                    maxLength={6}
-                    required
-                  />
-                </div>
-
-                <button type="submit" className="btn-primary">
-                  Verify & Complete Registration
-                </button>
-                <button
-                  type="button"
-                  className="btn-link"
-                  style={{ marginTop: "0.4rem", alignSelf: "center" }}
-                  onClick={handleSendVerificationCode}
-                >
-                  Resend Code
-                </button>
-              </form>
-            )}
-
-            <button
-              className="btn-link"
-              style={{ marginTop: "0.25rem", alignSelf: "center" }}
-              onClick={() => {
-                resetAddUserForm();
-                setView("manage-users");
-              }}
-            >
-              ← Back to User Options
-            </button>
-          </>
-        )}
-
-        {/* VIEW / DELETE USERS VIEW */}
-        {view === "view-users" && (
-          <>
-            <BrandHeader subtitle="Registered Users" />
-
-            <div style={{ marginBottom: "0.6rem", marginTop: "0.2rem" }}>
-              <input
-                type="text"
-                className="auth-input"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="🔍 Search user by username..."
-                style={{
-                  padding: "0.55rem 0.75rem",
-                  fontSize: "0.85rem",
-                  backgroundColor: "#0f172a",
-                  borderColor: "#334155",
-                }}
-              />
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.5rem",
-                maxHeight: "200px",
-                overflowY: "auto",
-                paddingRight: "0.25rem",
-              }}
-            >
-              {loadingUsers ? (
-                <p
-                  style={{
-                    color: "#94a3b8",
-                    textAlign: "center",
-                    fontSize: "0.85rem",
-                  }}
-                >
-                  Loading users...
-                </p>
-              ) : filteredUsers.length === 0 ? (
-                <p
-                  style={{
-                    color: "#94a3b8",
-                    textAlign: "center",
-                    fontSize: "0.85rem",
-                    padding: "0.5rem 0",
-                  }}
-                >
-                  {users.length === 0
-                    ? "No users found in database."
-                    : "No matching users found."}
-                </p>
-              ) : (
-                filteredUsers.map((u) => {
-                  const isCurrentUser =
-                    u.username.toLowerCase() === username.toLowerCase();
-                  return (
-                    <div
-                      key={u.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "0.6rem 0.8rem",
-                        backgroundColor: "#0f172a",
-                        borderRadius: "8px",
-                        border: "1px solid #334155",
-                      }}
-                    >
-                      <div style={{ display: "flex", flexDirection: "column" }}>
-                        <span
-                          style={{
-                            fontSize: "0.85rem",
-                            color: "#ffffff",
-                            fontWeight: 600,
-                          }}
-                        >
-                          {u.username}{" "}
-                          {isCurrentUser && (
-                            <span
-                              style={{ color: "#38bdf8", fontSize: "0.75rem" }}
-                            >
-                              (You)
-                            </span>
-                          )}
-                        </span>
-                      </div>
-
-                      {!isCurrentUser && (
-                        <button
-                          onClick={() => handleRemoveUser(u.id)}
-                          style={{
-                            backgroundColor: "#7f1d1d",
-                            color: "#fca5a5",
-                            border: "1px solid #b91c1c",
-                            padding: "0.3rem 0.6rem",
-                            borderRadius: "6px",
-                            fontSize: "0.75rem",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-            <button
-              className="btn-link"
-              style={{ marginTop: "0.5rem", alignSelf: "center" }}
-              onClick={() => {
-                setSearchTerm("");
-                setView("manage-users");
-              }}
-            >
-              ← Back to User Options
             </button>
           </>
         )}
