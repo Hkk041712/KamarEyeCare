@@ -1,234 +1,113 @@
-import hashlib
 import random
-import re
-from datetime import date, timedelta
+import logging
+from datetime import timedelta
 from django.utils import timezone
 from django.core.mail import send_mail
-from rest_framework.decorators import api_view
+from django.conf import settings
+from django.db import transaction
+from django.db.models import F
+from django.contrib.auth.hashers import check_password, make_password
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from .models import User
-from .models import Product, Sale
-from .models import Product, Sale
-import random
+from rest_framework.throttling import AnonRateThrottle
+from rest_framework_simplejwt.tokens import RefreshToken
 
-ALLOWED_DOMAINS = {
-    'gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com',
-    'aol.com', 'proton.me', 'protonmail.com', 'mail.com', 'gmx.com',
-    'zoho.com', 'yandex.com', 'live.com', 'msn.com', 'me.com', 'mac.com',
-    'fastmail.com', 'tutanota.com', 'hey.com'
-}
+from .models import User, Product, Sale, Patient, Expense
+from .serializers import ExpenseSerializer
 
-def validate_password_strength(password):
-    if len(password) < 8:
-        return "Password must be at least 8 characters long."
-    if not re.search(r'[A-Z]', password):
-        return "Password must contain at least one uppercase letter (A-Z)."
-    if not re.search(r'[a-z]', password):
-        return "Password must contain at least one lowercase letter (a-z)."
-    if not re.search(r'[0-9]', password):
-        return "Password must contain at least one number (0-9)."
-    return None
+logger = logging.getLogger(__name__)
 
-def generate_custom_id(username):
-    prefix = username[:3].upper().ljust(3, 'X')
-    while True:
-        random_num = str(random.randint(1000, 9999))
-        custom_id = f"{prefix}{random_num}"
-        if not User.objects.filter(id=custom_id).exists():
-            return custom_id
+class AuthRateThrottle(AnonRateThrottle):
+    rate = '5/min'
+
 
 @api_view(['POST'])
-def send_verification_code(request):
-    username = request.data.get('username', '').strip()
-    password = request.data.get('password', '')
+@permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
+def login_view(request):
+    try:
+        username = (request.data.get('username') or request.data.get('email') or '').strip().lower()
+        password = request.data.get('password', '')
 
-    if not username or not password:
-        return Response({'error': 'Email and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not username or not password:
+            return Response({'error': 'Credentials required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    username_lower = username.lower()
-    email_match = re.match(r'^[^@\s]+@([^@\s]+)$', username_lower)
+        user = User.objects.filter(username=username).first()
+        if not user or not check_password(password, user.password_hash):
+            return Response({'error': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    if not email_match or email_match.group(1) not in ALLOWED_DOMAINS:
-        return Response({'error': 'Please use a valid email address from an allowed provider.'}, status=status.HTTP_400_BAD_REQUEST)
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'message': 'Login successful.',
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user_id': user.id,
+            'username': user.username
+        }, status=status.HTTP_200_OK)
 
-    password_error = validate_password_strength(password)
-    if password_error:
-        return Response({'error': password_error}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        return Response({'error': "An internal error occurred. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    if User.objects.filter(username=username, is_verified=True).exists():
-        return Response({'error': 'User with this email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    today = date.today()
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
+def request_password_reset_otp(request):
+    username = (request.data.get('username') or '').strip().lower()
+    if not username:
+        return Response({'error': 'Email address is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
     user = User.objects.filter(username=username).first()
-
     if not user:
-        custom_id = generate_custom_id(username)
-        user = User(id=custom_id, username=username)
+        return Response({'message': 'If the account exists, an OTP code has been sent.'}, status=status.HTTP_200_OK)
 
-    if user.last_code_sent_date != today:
-        user.codes_sent_today = 0
-        user.last_code_sent_date = today
-
-    if user.codes_sent_today >= 5:
-        return Response({'error': 'Maximum limit of 5 verification codes per day reached for this email.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
-
-    code = f"{random.randint(100000, 999999)}"
-    password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
-
-    user.password_hash = password_hash
-    user.verification_code = code
-    user.code_created_at = timezone.now()
-    user.codes_sent_today += 1
+    otp = f"{random.randint(100000, 999999)}"
+    user.reset_otp = make_password(otp)
+    user.reset_otp_created_at = timezone.now()
     user.save()
 
     try:
         send_mail(
-            subject='Kamar Eye Care - Email Verification Code',
-            message=f'Your verification code is: {code}\n\nThis code will expire in 3 minutes.',
-            from_email=None,
-            recipient_list=[username],
+            subject="Kamar Eye Care - Password Reset OTP",
+            message=f"Your verification code is: {otp}\n\nThis code will expire in 10 minutes.",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.username],
             fail_silently=False,
         )
-    except Exception:
-        return Response({'error': 'Failed to send verification code via SMTP.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        logger.error(f"Email failure: {str(e)}")
+        return Response({'error': 'Failed to send OTP email. Please try again.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    return Response({'message': 'Verification code sent to email.'}, status=status.HTTP_200_OK)
+    return Response({'message': 'If the account exists, an OTP code has been sent.'}, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
-def verify_and_register(request):
-    username = request.data.get('username', '').strip()
-    code = request.data.get('code', '').strip()
+@permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
+def confirm_password_reset(request):
+    username = (request.data.get('username') or '').strip().lower()
+    otp = request.data.get('otp', '').strip()
+    new_password = request.data.get('new_password', '')
 
-    try:
-        user = User.objects.get(username=username)
-    except User.DoesNotExist:
-        return Response({'error': 'Registration session not found.'}, status=status.HTTP_404_NOT_FOUND)
+    if not username or not otp or not new_password:
+        return Response({'error': 'All fields (email, OTP, new password) are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Check 3-minute expiration limit
-    if not user.code_created_at or timezone.now() > user.code_created_at + timedelta(minutes=3):
-        return Response({'error': 'Verification code has expired (3 minutes limit). Please request a new code.'}, status=status.HTTP_400_BAD_REQUEST)
+    user = User.objects.filter(username=username).first()
+    if not user or not user.reset_otp or not check_password(otp, user.reset_otp):
+        return Response({'error': 'Invalid OTP code or email.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # If verification fails, stop immediately—nothing happens
-    if user.verification_code != code:
-        return Response({'error': 'Invalid verification code.'}, status=status.HTTP_400_BAD_REQUEST)
+    if user.reset_otp_created_at and (timezone.now() - user.reset_otp_created_at > timedelta(minutes=10)):
+        return Response({'error': 'OTP code has expired. Please request a new one.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Update verification status
-    user.is_verified = True
-    user.verification_code = None
+    user.password_hash = make_password(new_password)
+    user.reset_otp = None
     user.save()
 
-    # 1. Send confirmation email to the user
-    try:
-        send_mail(
-            subject='Welcome to Kamar Eye Care - Full Access Granted',
-            message=f'Hello {user.username},\n\nYour email has been successfully verified! You now have full access to your Kamar Eye Care account.',
-            from_email=None,
-            recipient_list=[user.username],
-            fail_silently=True,
-        )
-    except Exception:
-        pass
+    return Response({'message': 'Password updated successfully.'}, status=status.HTTP_200_OK)
 
-    # 2. Send notification email to the admin
-    admin_email = 'hasankamar2004@gmail.com'
-    try:
-        send_mail(
-            subject='Admin Alert: New Verified User Joined',
-            message=f'Admin Notification:\n\nThe user "{user.username}" (ID: {user.id}) has successfully verified their code and entered the application.',
-            from_email=None,
-            recipient_list=[admin_email],
-            fail_silently=True,
-        )
-    except Exception:
-        pass
-
-    return Response({
-        'message': f'User verified successfully! Full access granted. ID: {user.id}'
-    }, status=status.HTTP_201_CREATED)
-
-@api_view(['GET'])
-def get_users(request):
-    # Fetch all users from the database table directly
-    users = User.objects.all().values('id', 'username', 'created_at', 'is_verified')
-    return Response(list(users), status=status.HTTP_200_OK)
-
-
-@api_view(['DELETE'])
-def delete_user(request, user_id):
-    try:
-        user = User.objects.get(id=user_id)
-        user_email = user.username  # Storing email before deletion
-
-        # Perform deletion
-        user.delete()
-
-        # 1. Send deletion notification to the user
-        try:
-            send_mail(
-                subject='Kamar Eye Care - Account Deletion Notice',
-                message=(
-                    f'Hello,\n\n'
-                    f'Your Kamar Eye Care account (ID: {user_id}) has been successfully deleted.\n'
-                    f'If you did not request this action, please contact support immediately.'
-                ),
-                from_email=None,
-                recipient_list=[user_email],
-                fail_silently=True,
-            )
-        except Exception:
-            pass
-
-        # 2. Send deletion alert to the admin
-        admin_email = 'hasankamar2004@gmail.com'
-        try:
-            send_mail(
-                subject='Admin Alert: User Account Deleted',
-                message=(
-                    f'Admin Notification:\n\n'
-                    f'The user account "{user_email}" (ID: {user_id}) has been deleted from the database.'
-                ),
-                from_email=None,
-                recipient_list=[admin_email],
-                fail_silently=True,
-            )
-        except Exception:
-            pass
-
-        return Response({'message': f'User {user_id} deleted successfully, and notification emails were sent.'}, status=status.HTTP_200_OK)
-
-    except User.DoesNotExist:
-        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-
-
-@api_view(['POST'])
-def login_view(request):
-    # Accept either 'username' or 'email' key from the frontend payload
-    username = (request.data.get('username') or request.data.get('email') or '').strip()
-    password = request.data.get('password', '')
-
-    if not username or not password:
-        return Response({'error': 'Email/Username and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
-
-    try:
-        user = User.objects.get(username=username)
-        
-        # Check if the user completed email verification
-        if not user.is_verified:
-            return Response({'error': 'Account is not verified yet. Please verify your email first.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Check password hash match
-        if user.password_hash == password_hash:
-            return Response({'message': f'Welcome back, {user.username}! Login successful.', 'user_id': user.id}, status=status.HTTP_200_OK)
-        else:
-            return Response({'error': 'Invalid email or password.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    except User.DoesNotExist:
-        return Response({'error': 'Invalid email or password.'}, status=status.HTTP_400_BAD_REQUEST)
-    
 
 def generate_product_id():
     while True:
@@ -236,104 +115,6 @@ def generate_product_id():
         if not Product.objects.filter(id=prod_id).exists():
             return prod_id
 
-def generate_sale_id():
-    return f"SLS{random.randint(1000, 9999)}"
-
-@api_view(['GET', 'POST'])
-def manage_products(request):
-    if request.method == 'GET':
-        products = Product.objects.all().order_by('-created_at')
-        data = [
-            {
-                "id": p.id,
-                "name": p.name,
-                "category": p.category,
-                "quantity": p.quantity,
-                "buy_price": float(p.buy_price),
-                "sell_price": float(p.sell_price),
-                "created_at": p.created_at.strftime("%Y-%m-%d"),
-            }
-            for p in products
-        ]
-        return Response(data, status=status.HTTP_200_OK)
-
-    elif request.method == 'POST':
-        name = request.data.get('name')
-        category = request.data.get('category')
-        quantity = request.data.get('quantity', 0)
-        buy_price = request.data.get('buy_price', 0.0)
-        sell_price = request.data.get('sell_price', 0.0)
-
-        if not name or not category:
-            return Response({'error': 'Name and Category are required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        product = Product.objects.create(
-            id=generate_product_id(),
-            name=name,
-            category=category,
-            quantity=int(quantity),
-            buy_price=float(buy_price),
-            sell_price=float(sell_price)
-        )
-        return Response({'message': 'Product added successfully!', 'id': product.id}, status=status.HTTP_201_CREATED)
-
-
-@api_view(['GET', 'POST'])
-def manage_sales(request):
-    if request.method == 'GET':
-        sales = Sale.objects.all().order_by('-created_at')
-        data = [
-            {
-                "id": s.id,
-                "product_id": s.product.id,
-                "product_name": s.product.name,
-                "quantity": s.quantity,
-                "unit_price": float(s.unit_price),
-                "total": float(s.total),
-                "created_at": s.created_at.strftime("%Y-%m-%d"),
-            }
-            for s in sales
-        ]
-        return Response(data, status=status.HTTP_200_OK)
-
-    elif request.method == 'POST':
-        product_id = request.data.get('product_id')
-        qty = int(request.data.get('quantity', 1))
-
-        try:
-            product = Product.objects.get(id=product_id)
-            if product.quantity < qty:
-                return Response({'error': 'Insufficient stock available.'}, status=status.HTTP_400_BAD_REQUEST)
-
-            unit_price = float(product.sell_price)
-            total = unit_price * qty
-
-            # Deduct stock
-            product.quantity -= qty
-            product.save()
-
-            sale = Sale.objects.create(
-                id=generate_sale_id(),
-                product=product,
-                quantity=qty,
-                unit_price=unit_price,
-                total=total
-            )
-            return Response({'message': 'Sale recorded successfully!', 'id': sale.id}, status=status.HTTP_201_CREATED)
-        except Product.DoesNotExist:
-            return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
-        
-        from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import status
-from .models import Product, Sale
-import random
-
-def generate_product_id():
-    while True:
-        prod_id = f"PRD{random.randint(1000, 9999)}"
-        if not Product.objects.filter(id=prod_id).exists():
-            return prod_id
 
 def generate_sale_id():
     while True:
@@ -341,7 +122,16 @@ def generate_sale_id():
         if not Sale.objects.filter(id=sale_id).exists():
             return sale_id
 
+
+def generate_patient_id():
+    while True:
+        patient_id = f"PAT{random.randint(1000, 9999)}"
+        if not Patient.objects.filter(id=patient_id).exists():
+            return patient_id
+
+
 @api_view(['GET', 'POST', 'DELETE'])
+@permission_classes([IsAuthenticated])
 def manage_products(request, product_id=None):
     if request.method == 'GET':
         products = Product.objects.all().order_by('-created_at')
@@ -362,26 +152,31 @@ def manage_products(request, product_id=None):
     elif request.method == 'POST':
         name = request.data.get('name')
         category = request.data.get('category')
-        quantity = request.data.get('quantity', 0)
-        buy_price = request.data.get('buy_price', 0.0)
-        sell_price = request.data.get('sell_price', 0.0)
 
         if not name or not category:
             return Response({'error': 'Name and Category are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            quantity = int(request.data.get('quantity', 0))
+            buy_price = float(request.data.get('buy_price', 0.0))
+            sell_price = float(request.data.get('sell_price', 0.0))
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid numeric value for price or quantity.'}, status=status.HTTP_400_BAD_REQUEST)
 
         product = Product.objects.create(
             id=generate_product_id(),
             name=name,
             category=category,
-            quantity=int(quantity),
-            buy_price=float(buy_price),
-            sell_price=float(sell_price)
+            quantity=quantity,
+            buy_price=buy_price,
+            sell_price=sell_price
         )
         return Response({'message': 'Product added successfully!', 'id': product.id}, status=status.HTTP_201_CREATED)
 
     elif request.method == 'DELETE':
         if not product_id:
             return Response({'error': 'Product ID is required for deletion.'}, status=status.HTTP_400_BAD_REQUEST)
+            
         try:
             product = Product.objects.get(id=product_id)
             product.delete()
@@ -391,6 +186,7 @@ def manage_products(request, product_id=None):
 
 
 @api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
 def manage_sales(request):
     if request.method == 'GET':
         sales = Sale.objects.all().order_by('-created_at')
@@ -416,33 +212,128 @@ def manage_sales(request):
         sale_date = request.data.get('created_at')
 
         try:
-            product = Product.objects.get(id=product_id)
-            
-            if product.quantity < qty:
-                return Response({'error': f'Insufficient stock. Only {product.quantity} units remaining.'}, status=status.HTTP_400_BAD_REQUEST)
+            with transaction.atomic():
+                product = Product.objects.select_for_update().get(id=product_id)
+                
+                if product.quantity < qty:
+                    return Response({'error': f'Insufficient stock. Only {product.quantity} units remaining.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            unit_price = float(custom_price) if custom_price is not None else float(product.sell_price)
-            total = unit_price * qty
+                unit_price = float(custom_price) if custom_price is not None else float(product.sell_price)
+                total = unit_price * qty
 
-            # 1. Deduct stock from product
-            product.quantity -= qty
-            product.save()
+                product.quantity -= qty
+                product.save()
 
-            # 2. Record sale
-            sale = Sale.objects.create(
-                id=generate_sale_id(),
-                product=product,
-                quantity=qty,
-                unit_price=unit_price,
-                total=total
-            )
+                sale = Sale.objects.create(
+                    id=generate_sale_id(),
+                    product=product,
+                    quantity=qty,
+                    unit_price=unit_price,
+                    total=total
+                )
 
-            # Override created_at if custom date is passed
-            if sale_date:
-                sale.created_at = sale_date
-                sale.save()
+                if sale_date:
+                    sale.created_at = sale_date
+                    sale.save()
 
             return Response({'message': 'Income transaction recorded successfully!', 'id': sale.id}, status=status.HTTP_201_CREATED)
             
         except Product.DoesNotExist:
             return Response({'error': 'Selected product does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET', 'POST', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def manage_patients(request, patient_id=None):
+    if request.method == 'GET':
+        patients = Patient.objects.all().order_by('-created_at')
+        data = [
+            {
+                "id": p.id,
+                "patient_id": p.id,
+                "full_name": p.full_name,
+                "name": p.full_name,
+                "phone": p.phone or "",
+                "email": p.email or "",
+                "frame_chosen": p.frame_chosen or "",
+                "lens_chosen": p.lens_chosen or "",
+                "others_chosen": p.others_chosen or "",
+                "notes": p.notes or "",
+                "power_right_sphere": p.power_right_sphere or "0.00",
+                "power_right_cylinder": p.power_right_cylinder or "0.00",
+                "power_right_addition": p.power_right_addition or "0.00",
+                "power_left_sphere": p.power_left_sphere or "0.00",
+                "power_left_cylinder": p.power_left_cylinder or "0.00",
+                "power_left_addition": p.power_left_addition or "0.00",
+                "power_notes": p.power_notes or "",
+                "created_at": p.created_at.strftime("%Y-%m-%d") if p.created_at else "",
+            }
+            for p in patients
+        ]
+        return Response(data, status=status.HTTP_200_OK)
+
+    elif request.method == 'POST':
+        full_name = (request.data.get('full_name') or request.data.get('name') or '').strip()
+        
+        if not full_name:
+            return Response({'error': 'Full name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        patient = Patient.objects.create(
+            id=request.data.get('patient_id') or generate_patient_id(),
+            full_name=full_name,
+            phone=request.data.get('phone', '').strip(),
+            email=request.data.get('email', '').strip(),
+            frame_chosen=request.data.get('frame_chosen', ''),
+            lens_chosen=request.data.get('lens_chosen', ''),
+            others_chosen=request.data.get('others_chosen', ''),
+            notes=request.data.get('notes', ''),
+            power_right_sphere=request.data.get('power_right_sphere', ''),
+            power_right_cylinder=request.data.get('power_right_cylinder', ''),
+            power_right_addition=request.data.get('power_right_addition', ''),
+            power_left_sphere=request.data.get('power_left_sphere', ''),
+            power_left_cylinder=request.data.get('power_left_cylinder', ''),
+            power_left_addition=request.data.get('power_left_addition', ''),
+            power_notes=request.data.get('power_notes', '')
+        )
+        return Response({'message': 'Patient recorded successfully!', 'id': patient.id}, status=status.HTTP_201_CREATED)
+
+    elif request.method == 'DELETE':
+        if not patient_id:
+            return Response({'error': 'Patient ID is required for deletion.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            patient = Patient.objects.get(id=patient_id)
+            patient.delete()
+            return Response({'message': f'Patient {patient_id} deleted successfully.'}, status=status.HTTP_200_OK)
+        except Patient.DoesNotExist:
+            return Response({'error': 'Patient not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def manage_expenses(request):
+    if request.method == 'GET':
+        expenses = Expense.objects.all().order_by('-created_at')
+        serializer = ExpenseSerializer(expenses, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    elif request.method == 'POST':
+        serializer = ExpenseSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Expense recorded successfully!", "data": serializer.data},
+                status=status.HTTP_201_CREATED
+            )
+        return Response({"error": "Invalid expense details provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_expense(request, expense_id):
+    try:
+        expense = Expense.objects.get(id=expense_id)
+        expense.delete()
+        return Response({"message": "Expense record deleted successfully!"}, status=status.HTTP_200_OK)
+    except Expense.DoesNotExist:
+        return Response({"error": "Expense record not found."}, status=status.HTTP_404_NOT_FOUND)
