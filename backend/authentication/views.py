@@ -220,8 +220,8 @@ def manage_sales(request):
                 "product_name": s.product.name if s.product else "Deleted Product",
                 "quantity": s.quantity,
                 "unit_price": float(s.unit_price),
-                "total": float(s.total) if hasattr(s, 'total') else float(s.unit_price * s.quantity),
-                "created_at": s.created_at.strftime("%Y-%m-%d") if s.created_at else None,
+                "total": float(s.total) if hasattr(s, 'total') and s.total is not None else float(s.unit_price * s.quantity),
+                "created_at": s.created_at.strftime("%Y-%m-%d") if getattr(s, 'created_at', None) else None,
             }
             for s in sales
         ]
@@ -239,7 +239,6 @@ def manage_sales(request):
             return Response({'error': 'Product ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Atomic transaction to ensure data integrity
             with transaction.atomic():
                 product = Product.objects.select_for_update().get(id=product_id)
 
@@ -249,18 +248,21 @@ def manage_sales(request):
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
-                # Record the sale transaction
+                # Calculate total price
+                total_amount = (unit_price * quantity).quantize(Decimal('0.01'))
+
+                # Generate Sale ID & Create Record
                 sale = Sale.objects.create(
+                    id=generate_sale_id(),
                     product=product,
                     quantity=quantity,
                     unit_price=unit_price,
-                    created_at=request.data.get('created_at')
+                    total=total_amount
                 )
 
-                # Deduct stock quantity
+                # Update product stock
                 product.quantity -= quantity
 
-                # Check if stock has reached 0
                 if product.quantity <= 0:
                     product.delete()
                     msg = 'Sale recorded successfully! Stock reached 0 and the product was automatically removed from inventory.'
@@ -271,7 +273,10 @@ def manage_sales(request):
                 return Response({'message': msg, 'sale_id': sale.id}, status=status.HTTP_201_CREATED)
 
         except Product.DoesNotExist:
-            return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND) 
+            return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Sale processing error: {str(e)}", exc_info=True)
+            return Response({'error': f'Failed to process sale: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET', 'POST', 'DELETE'])

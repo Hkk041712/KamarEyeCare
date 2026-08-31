@@ -46,7 +46,8 @@ class Sale(models.Model):
         db_table = 'sales'
 
     def __str__(self):
-        return f"{self.id} - {self.product.name}"
+        prod_name = self.product.name if self.product else "Deleted Product"
+        return f"{self.id} - {prod_name}"
     
 class Patient(models.Model):
     id = models.CharField(max_length=20, primary_key=True)
