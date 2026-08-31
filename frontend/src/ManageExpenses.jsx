@@ -1,22 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+// Import your centralized API instance instead of raw axios
+import api from "./api"; // Adjust path if api.js is in another folder (e.g., ../api)
 import bgImage from "./assets/eyecare-bg.jpg";
 import "./ManageExpenses.css";
-
-const API_BASE_URL = "http://127.0.0.1:8000/api/auth";
-
-// Helper for Axios config with auth headers
-const getAuthHeaders = () => {
-  const token =
-    localStorage.getItem("token") || localStorage.getItem("authToken");
-  return {
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    withCredentials: true,
-  };
-};
 
 export default function ManageExpenses({ onBack, currentUser }) {
   const [activeTab, setActiveTab] = useState("view");
@@ -40,10 +26,8 @@ export default function ManageExpenses({ onBack, currentUser }) {
   const fetchExpenses = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/expenses/`,
-        getAuthHeaders()
-      );
+      // Uses base URL (https://kamareyecare.onrender.com/api) + '/expenses/'
+      const response = await api.get("/expenses/");
       setExpenses(response.data?.results || response.data || []);
     } catch (err) {
       console.error("Failed to fetch expenses:", err);
@@ -80,11 +64,7 @@ export default function ManageExpenses({ onBack, currentUser }) {
     };
 
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/expenses/`,
-        payload,
-        getAuthHeaders()
-      );
+      const response = await api.post("/expenses/", payload);
       setStatusMsg({
         text: response.data?.message || "Expense recorded successfully!",
         isError: false,
@@ -112,7 +92,7 @@ export default function ManageExpenses({ onBack, currentUser }) {
       return;
 
     try {
-      await axios.delete(`${API_BASE_URL}/expenses/${id}/`, getAuthHeaders());
+      await api.delete(`/expenses/${id}/`);
       setStatusMsg({ text: "Expense deleted successfully!", isError: false });
       fetchExpenses();
     } catch (err) {
