@@ -135,69 +135,78 @@ def generate_patient_id():
 @api_view(['GET', 'POST', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def manage_products(request, product_id=None):
-    if request.method == 'GET':
-        products = Product.objects.all().order_by('-created_at')
-        data = [
-            {
-                "id": p.id,
-                "name": p.name,
-                "category": p.category,
-                "quantity": p.quantity,
-                "buy_price": float(p.buy_price) if p.buy_price is not None else 0.0,
-                "sell_price": float(p.sell_price) if p.sell_price is not None else 0.0,
-                "created_at": p.created_at.strftime("%Y-%m-%d") if hasattr(p, 'created_at') and p.created_at else None,
-            }
-            for p in products
-        ]
-        return Response(data, status=status.HTTP_200_OK)
+    try:
+        if request.method == 'GET':
+            products = Product.objects.all().order_by('-created_at')
+            data = []
+            for p in products:
+                # Safe date formatting
+                created_str = None
+                if getattr(p, 'created_at', None):
+                    try:
+                        created_str = p.created_at.strftime("%Y-%m-%d")
+                    except AttributeError:
+                        created_str = str(p.created_at)[:10]
 
-    elif request.method == 'POST':
-        custom_id = (request.data.get('id') or '').strip()
-        name = request.data.get('name')
-        category = request.data.get('category', 'Frames')
+                data.append({
+                    "id": p.id,
+                    "name": p.name,
+                    "category": p.category,
+                    "quantity": p.quantity,
+                    "buy_price": float(p.buy_price) if p.buy_price is not None else 0.0,
+                    "sell_price": float(p.sell_price) if p.sell_price is not None else 0.0,
+                    "created_at": created_str,
+                })
+            return Response(data, status=status.HTTP_200_OK)
 
-        if not custom_id:
-            return Response({'error': 'Product ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        elif request.method == 'POST':
+            custom_id = (request.data.get('id') or '').strip()
+            name = request.data.get('name')
+            category = request.data.get('category', 'Frames')
 
-        if not name:
-            return Response({'error': 'Name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            if not custom_id:
+                return Response({'error': 'Product ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if Product.objects.filter(id=custom_id).exists():
-            return Response({'error': f'Product with ID "{custom_id}" already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+            if not name:
+                return Response({'error': 'Name is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Parse and sanitize numerical inputs strictly
-        try:
-            quantity = int(request.data.get('quantity', 0))
-            
-            raw_buy = str(request.data.get('buy_price', 0)).strip() or '0'
-            raw_sell = str(request.data.get('sell_price', 0)).strip() or '0'
+            if Product.objects.filter(id=custom_id).exists():
+                return Response({'error': f'Product with ID "{custom_id}" already exists.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            buy_price = Decimal(raw_buy).quantize(Decimal('0.01'))
-            sell_price = Decimal(raw_sell).quantize(Decimal('0.01'))
-        except (ValueError, TypeError, InvalidOperation):
-            return Response({'error': 'Invalid format for price or quantity.'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                quantity = int(request.data.get('quantity', 0))
+                raw_buy = str(request.data.get('buy_price', 0)).strip() or '0'
+                raw_sell = str(request.data.get('sell_price', 0)).strip() or '0'
 
-        product = Product.objects.create(
-            id=custom_id,
-            name=name,
-            category=category,
-            quantity=quantity,
-            buy_price=buy_price,
-            sell_price=sell_price
-        )
-        return Response({'message': 'Product added successfully!', 'id': product.id}, status=status.HTTP_201_CREATED)
+                buy_price = Decimal(raw_buy).quantize(Decimal('0.01'))
+                sell_price = Decimal(raw_sell).quantize(Decimal('0.01'))
+            except (ValueError, TypeError, InvalidOperation):
+                return Response({'error': 'Invalid format for price or quantity.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    elif request.method == 'DELETE':
-        if not product_id:
-            return Response({'error': 'Product ID is required for deletion.'}, status=status.HTTP_400_BAD_REQUEST)
-            
-        try:
-            product = Product.objects.get(id=product_id)
-            product.delete()
-            return Response({'message': f'Product {product_id} deleted successfully.'}, status=status.HTTP_200_OK)
-        except Product.DoesNotExist:
-            
-            return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
+            product = Product.objects.create(
+                id=custom_id,
+                name=name,
+                category=category,
+                quantity=quantity,
+                buy_price=buy_price,
+                sell_price=sell_price
+            )
+            return Response({'message': 'Product added successfully!', 'id': product.id}, status=status.HTTP_201_CREATED)
+
+        elif request.method == 'DELETE':
+            if not product_id:
+                return Response({'error': 'Product ID is required for deletion.'}, status=status.HTTP_400_BAD_REQUEST)
+                
+            try:
+                product = Product.objects.get(id=product_id)
+                product.delete()
+                return Response({'message': f'Product {product_id} deleted successfully.'}, status=status.HTTP_200_OK)
+            except Product.DoesNotExist:
+                return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    except Exception as e:
+        logger.error(f"manage_products internal error: {str(e)}", exc_info=True)
+        return Response({'error': f'Server error processing products: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
