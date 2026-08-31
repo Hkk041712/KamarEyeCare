@@ -1,14 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import api from "./api";
 import bgImage from "./assets/eyecare-bg.jpg";
 import "./ManageProducts.css";
 
-const API_BASE_URL = "http://127.0.0.1:8000/api/auth";
-
 export default function ManageProducts({ onBack }) {
-  const [activeTab, setActiveTab] = useState("view"); // 'add', 'view', 'add-income', 'income'
+  const [activeTab, setActiveTab] = useState("view");
 
-  // Form State for Add Product
   const [productForm, setProductForm] = useState({
     name: "",
     category: "Frames",
@@ -17,7 +14,6 @@ export default function ManageProducts({ onBack }) {
     sell_price: "",
   });
 
-  // Form State for Recording Sale / Income
   const [saleForm, setSaleForm] = useState({
     product_id: "",
     quantity: 1,
@@ -26,51 +22,66 @@ export default function ManageProducts({ onBack }) {
   });
   const [selectedProduct, setSelectedProduct] = useState(null);
 
-  // Table Data States
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ text: "", isError: false });
 
-  // Search Terms
   const [productSearchTerm, setProductSearchTerm] = useState("");
   const [salesSearchTerm, setSalesSearchTerm] = useState("");
 
-  // Sorting State for Products Table
   const [prodSortConfig, setProdSortConfig] = useState({
     key: "id",
     direction: "asc",
   });
 
-  // Sorting State for Sales Table
   const [salesSortConfig, setSalesSortConfig] = useState({
     key: "id",
     direction: "asc",
   });
 
-  // Fetch Products & Sales Data
+  const [debugError, setDebugError] = useState("");
+
   const fetchData = useCallback(async () => {
     setLoading(true);
-    try {
-      const [prodRes, salesRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/products/`),
-        axios.get(`${API_BASE_URL}/sales/`),
-      ]);
-      setProducts(prodRes.data || []);
-      setSales(salesRes.data || []);
-    } catch (err) {
-      console.error("Failed to load inventory data:", err);
-    } finally {
-      setLoading(false);
+    setDebugError("");
+
+    const [prodRes, salesRes] = await Promise.allSettled([
+      api.get("/auth/products/"),
+      api.get("/auth/sales/"),
+    ]);
+
+    if (prodRes.status === "fulfilled") {
+      setProducts(prodRes.value.data?.results || prodRes.value.data || []);
+    } else {
+      console.error("Failed to load products:", prodRes.reason);
+      const errData = prodRes.reason?.response?.data;
+      const errMsg =
+        typeof errData === "string"
+          ? errData
+          : JSON.stringify(errData) || prodRes.reason?.message;
+      setDebugError((prev) => prev + ` [Products Error: ${errMsg}]`);
     }
+
+    if (salesRes.status === "fulfilled") {
+      setSales(salesRes.value.data?.results || salesRes.value.data || []);
+    } else {
+      console.error("Failed to load sales:", salesRes.reason);
+      const errData = salesRes.reason?.response?.data;
+      const errMsg =
+        typeof errData === "string"
+          ? errData
+          : JSON.stringify(errData) || salesRes.reason?.message;
+      setDebugError((prev) => prev + ` [Sales Error: ${errMsg}]`);
+    }
+
+    setLoading(false);
   }, []);
 
   useEffect(() => {
     let isMounted = true;
     const loadInventory = async () => {
-      if (isMounted) {
-        await fetchData();
-      }
+      if (isMounted) await fetchData();
     };
     loadInventory();
 
@@ -79,19 +90,17 @@ export default function ManageProducts({ onBack }) {
     };
   }, [fetchData]);
 
-  // Handle Input Changes for Add Product
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setProductForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Add Product Submit Handler
   const handleAddProduct = async (e) => {
     e.preventDefault();
     setStatusMsg({ text: "", isError: false });
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/products/`, {
+      const response = await api.post("/auth/products/", {
         name: productForm.name,
         category: productForm.category,
         quantity: parseInt(productForm.quantity, 10),
@@ -100,7 +109,7 @@ export default function ManageProducts({ onBack }) {
       });
 
       setStatusMsg({
-        text: response.data.message || "Product added successfully!",
+        text: response.data?.message || "Product added successfully!",
         isError: false,
       });
       setProductForm({
@@ -114,32 +123,37 @@ export default function ManageProducts({ onBack }) {
       setTimeout(() => setActiveTab("view"), 1200);
     } catch (err) {
       setStatusMsg({
-        text: err.response?.data?.error || "Failed to add product.",
+        text:
+          err.response?.data?.detail ||
+          err.response?.data?.error ||
+          "Failed to add product.",
         isError: true,
       });
     }
   };
 
-  // Delete Product Handler
   const handleDeleteProduct = async (productId) => {
     if (
-      !window.confirm(`Are you sure you want to delete product ${productId}?`)
+      !window.confirm(`Are you sure you want to delete product #${productId}?`)
     )
       return;
 
     try {
-      await axios.delete(`${API_BASE_URL}/products/${productId}/`);
+      await api.delete(`/auth/products/${productId}/`);
       setStatusMsg({ text: "Product deleted successfully!", isError: false });
       fetchData();
     } catch (err) {
-      alert(err.response?.data?.error || "Failed to delete product.");
+      alert(
+        err.response?.data?.detail ||
+          err.response?.data?.error ||
+          "Failed to delete product."
+      );
     }
   };
 
-  // Handle Dynamic Selection of Product in Sale Form
   const handleProductSelect = (e) => {
     const prodId = e.target.value;
-    const prod = products.find((p) => p.id === prodId);
+    const prod = products.find((p) => String(p.id) === String(prodId));
     setSelectedProduct(prod || null);
     setSaleForm((prev) => ({
       ...prev,
@@ -148,7 +162,6 @@ export default function ManageProducts({ onBack }) {
     }));
   };
 
-  // Record Sale / Add Income Handler
   const handleAddSale = async (e) => {
     e.preventDefault();
     setStatusMsg({ text: "", isError: false });
@@ -162,15 +175,18 @@ export default function ManageProducts({ onBack }) {
     }
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/sales/`, {
+      const parsedQty = parseInt(saleForm.quantity, 10);
+      const parsedPrice = parseFloat(saleForm.unit_price);
+
+      const response = await api.post("/auth/sales/", {
         product_id: saleForm.product_id,
-        quantity: parseInt(saleForm.quantity, 10),
-        unit_price: parseFloat(saleForm.unit_price),
+        quantity: parsedQty,
+        unit_price: parsedPrice,
         created_at: saleForm.created_at,
       });
 
       setStatusMsg({
-        text: response.data.message || "Sale recorded and stock updated!",
+        text: response.data?.message || "Sale recorded and stock updated!",
         isError: false,
       });
       setSaleForm({
@@ -184,13 +200,15 @@ export default function ManageProducts({ onBack }) {
       setTimeout(() => setActiveTab("income"), 1200);
     } catch (err) {
       setStatusMsg({
-        text: err.response?.data?.error || "Failed to record sale transaction.",
+        text:
+          err.response?.data?.detail ||
+          err.response?.data?.error ||
+          "Failed to record sale transaction.",
         isError: true,
       });
     }
   };
 
-  // Product Sorting Handler
   const requestProdSort = (key) => {
     let direction = "asc";
     if (prodSortConfig.key === key && prodSortConfig.direction === "asc") {
@@ -199,7 +217,6 @@ export default function ManageProducts({ onBack }) {
     setProdSortConfig({ key, direction });
   };
 
-  // Sales Sorting Handler
   const requestSalesSort = (key) => {
     let direction = "asc";
     if (salesSortConfig.key === key && salesSortConfig.direction === "asc") {
@@ -208,7 +225,6 @@ export default function ManageProducts({ onBack }) {
     setSalesSortConfig({ key, direction });
   };
 
-  // Filter and Sort Products safely
   const processedProducts = [...products]
     .filter(
       (p) =>
@@ -240,14 +256,13 @@ export default function ManageProducts({ onBack }) {
       return 0;
     });
 
-  // Filter and Sort Sales safely
   const processedSales = [...sales]
     .filter(
       (s) =>
         String(s.id || "")
           .toLowerCase()
           .includes(salesSearchTerm.toLowerCase()) ||
-        String(s.product_id || "")
+        String(s.product_id || s.product || "")
           .toLowerCase()
           .includes(salesSearchTerm.toLowerCase()) ||
         String(s.created_at || "")
@@ -259,7 +274,14 @@ export default function ManageProducts({ onBack }) {
       let aVal = a[key] ?? "";
       let bVal = b[key] ?? "";
 
-      if (key === "quantity" || key === "unit_price" || key === "total") {
+      if (key === "total") {
+        aVal =
+          a.total ??
+          (parseFloat(a.unit_price) || 0) * (parseInt(a.quantity, 10) || 0);
+        bVal =
+          b.total ??
+          (parseFloat(a.unit_price) || 0) * (parseInt(a.quantity, 10) || 0);
+      } else if (key === "quantity" || key === "unit_price") {
         aVal = parseFloat(aVal) || 0;
         bVal = parseFloat(bVal) || 0;
       } else {
@@ -277,11 +299,12 @@ export default function ManageProducts({ onBack }) {
     return config.direction === "asc" ? " ▲" : " ▼";
   };
 
-  // Total calculated income from sales
-  const totalIncome = sales.reduce(
-    (acc, curr) => acc + (parseFloat(curr.total) || 0),
-    0
-  );
+  const totalIncome = sales.reduce((acc, curr) => {
+    const totalVal = curr.total
+      ? parseFloat(curr.total)
+      : (parseFloat(curr.unit_price) || 0) * (parseInt(curr.quantity, 10) || 0);
+    return acc + (parseFloat(totalVal) || 0);
+  }, 0);
 
   return (
     <div
@@ -290,8 +313,27 @@ export default function ManageProducts({ onBack }) {
         backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.55), rgba(15, 23, 42, 0.55)), url(${bgImage})`,
       }}
     >
+      {/* Red banner placed inside the JSX return statement */}
+      {debugError && (
+        <div
+          style={{
+            background: "#fee2e2",
+            border: "2px solid #ef4444",
+            color: "#991b1b",
+            padding: "16px",
+            borderRadius: "8px",
+            margin: "20px auto",
+            maxWidth: "1200px",
+            fontWeight: "bold",
+            zIndex: 9999,
+            position: "relative",
+          }}
+        >
+          🚨 Debug Error Caught: {debugError}
+        </div>
+      )}
+
       <div className="products-container">
-        {/* Header */}
         <div className="products-header">
           <div className="header-title-group">
             <svg
@@ -313,7 +355,6 @@ export default function ManageProducts({ onBack }) {
           )}
         </div>
 
-        {/* Top Navigation Bar */}
         <div className="nav-tabs">
           <button
             className={`tab-btn ${activeTab === "add" ? "active" : ""}`}
@@ -342,7 +383,6 @@ export default function ManageProducts({ onBack }) {
           </button>
         </div>
 
-        {/* Tab Content 1: ADD PRODUCT */}
         {activeTab === "add" && (
           <div className="tab-card">
             <h2 className="card-heading">Add New Optical Item</h2>
@@ -442,7 +482,6 @@ export default function ManageProducts({ onBack }) {
           </div>
         )}
 
-        {/* Tab Content 2: VIEW PRODUCTS */}
         {activeTab === "view" && (
           <div className="tab-card">
             <div className="card-header-row">
@@ -535,11 +574,13 @@ export default function ManageProducts({ onBack }) {
                             {p.quantity} units
                           </span>
                         </td>
-                        <td>${parseFloat(p.buy_price).toFixed(2)}</td>
+                        <td>${parseFloat(p.buy_price || 0).toFixed(2)}</td>
                         <td className="price-highlight">
-                          ${parseFloat(p.sell_price).toFixed(2)}
+                          ${parseFloat(p.sell_price || 0).toFixed(2)}
                         </td>
-                        <td>{p.created_at}</td>
+                        <td>
+                          {p.created_at ? p.created_at.split("T")[0] : "N/A"}
+                        </td>
                         <td>
                           <button
                             className="btn-delete-product"
@@ -557,7 +598,6 @@ export default function ManageProducts({ onBack }) {
           </div>
         )}
 
-        {/* Tab Content 3: RECORD SALE / ADD INCOME */}
         {activeTab === "add-income" && (
           <div className="tab-card">
             <h2 className="card-heading">Record Customer Transaction</h2>
@@ -591,7 +631,7 @@ export default function ManageProducts({ onBack }) {
                         disabled={p.quantity <= 0}
                       >
                         {p.name} ({p.quantity} available - $
-                        {parseFloat(p.sell_price).toFixed(2)})
+                        {parseFloat(p.sell_price || 0).toFixed(2)})
                       </option>
                     ))}
                   </select>
@@ -687,7 +727,6 @@ export default function ManageProducts({ onBack }) {
           </div>
         )}
 
-        {/* Tab Content 4: INCOME HISTORY (SALES) */}
         {activeTab === "income" && (
           <div className="tab-card">
             <div className="card-header-row">
@@ -772,15 +811,20 @@ export default function ManageProducts({ onBack }) {
                         <td className="id-badge">{s.id}</td>
                         <td className="font-semibold">
                           {s.product_name
-                            ? `${s.product_name} (${s.product_id})`
-                            : s.product_id}
+                            ? `${s.product_name} (${s.product_id || s.product})`
+                            : s.product_id || s.product}
                         </td>
                         <td>{s.quantity}</td>
-                        <td>${parseFloat(s.unit_price).toFixed(2)}</td>
+                        <td>${parseFloat(s.unit_price || 0).toFixed(2)}</td>
                         <td className="price-highlight">
-                          ${parseFloat(s.total).toFixed(2)}
+                          $
+                          {parseFloat(
+                            s.total ?? s.unit_price * s.quantity
+                          ).toFixed(2)}
                         </td>
-                        <td>{s.created_at}</td>
+                        <td>
+                          {s.created_at ? s.created_at.split("T")[0] : "N/A"}
+                        </td>
                       </tr>
                     ))
                   )}

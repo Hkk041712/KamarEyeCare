@@ -5,10 +5,22 @@ import "./ManageExpenses.css";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api/auth";
 
-export default function ManageExpenses({ onBack, currentUser }) {
-  const [activeTab, setActiveTab] = useState("view"); // 'view', 'add'
+// Helper for Axios config with auth headers
+const getAuthHeaders = () => {
+  const token =
+    localStorage.getItem("token") || localStorage.getItem("authToken");
+  return {
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    withCredentials: true,
+  };
+};
 
-  // State for expense list and form
+export default function ManageExpenses({ onBack, currentUser }) {
+  const [activeTab, setActiveTab] = useState("view");
+
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ text: "", isError: false });
@@ -19,18 +31,20 @@ export default function ManageExpenses({ onBack, currentUser }) {
     amount: "",
   });
 
-  // Table Sorting State
   const [sortConfig, setSortConfig] = useState({
     key: "created_at",
     direction: "desc",
   });
 
-  // Fetch Expenses from DB
+  // Fetch Expenses
   const fetchExpenses = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${API_BASE_URL}/expenses/`);
-      setExpenses(response.data || []);
+      const response = await axios.get(
+        `${API_BASE_URL}/expenses/`,
+        getAuthHeaders()
+      );
+      setExpenses(response.data?.results || response.data || []);
     } catch (err) {
       console.error("Failed to fetch expenses:", err);
     } finally {
@@ -41,9 +55,7 @@ export default function ManageExpenses({ onBack, currentUser }) {
   useEffect(() => {
     let isMounted = true;
     const loadData = async () => {
-      if (isMounted) {
-        await fetchExpenses();
-      }
+      if (isMounted) await fetchExpenses();
     };
     loadData();
     return () => {
@@ -51,13 +63,12 @@ export default function ManageExpenses({ onBack, currentUser }) {
     };
   }, [fetchExpenses]);
 
-  // Handle Form Inputs
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setExpenseForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Add New Expense
+  // Add Expense
   const handleAddExpense = async (e) => {
     e.preventDefault();
     setStatusMsg({ text: "", isError: false });
@@ -69,26 +80,31 @@ export default function ManageExpenses({ onBack, currentUser }) {
     };
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/expenses/`, payload);
+      const response = await axios.post(
+        `${API_BASE_URL}/expenses/`,
+        payload,
+        getAuthHeaders()
+      );
       setStatusMsg({
         text: response.data?.message || "Expense recorded successfully!",
         isError: false,
       });
 
-      // Reset form & reload list
       setExpenseForm({ description: "", amount: "" });
       fetchExpenses();
-
       setTimeout(() => setActiveTab("view"), 1200);
     } catch (err) {
       setStatusMsg({
-        text: err.response?.data?.error || "Failed to record expense.",
+        text:
+          err.response?.data?.detail ||
+          err.response?.data?.error ||
+          "Failed to record expense.",
         isError: true,
       });
     }
   };
 
-  // Delete Expense Record
+  // Delete Expense
   const handleDeleteExpense = async (id) => {
     if (
       !window.confirm(`Are you sure you want to delete expense record #${id}?`)
@@ -96,18 +112,18 @@ export default function ManageExpenses({ onBack, currentUser }) {
       return;
 
     try {
-      await axios.delete(`${API_BASE_URL}/expenses/${id}/`);
-      setStatusMsg({
-        text: "Expense deleted successfully!",
-        isError: false,
-      });
+      await axios.delete(`${API_BASE_URL}/expenses/${id}/`, getAuthHeaders());
+      setStatusMsg({ text: "Expense deleted successfully!", isError: false });
       fetchExpenses();
     } catch (err) {
-      alert(err.response?.data?.error || "Failed to delete expense record.");
+      alert(
+        err.response?.data?.detail ||
+          err.response?.data?.error ||
+          "Failed to delete expense record."
+      );
     }
   };
 
-  // Sorting Handler
   const requestSort = (key) => {
     let direction = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") {
@@ -121,7 +137,6 @@ export default function ManageExpenses({ onBack, currentUser }) {
     return sortConfig.direction === "asc" ? " ▲" : " ▼";
   };
 
-  // Search & Sorting Filter
   const processedExpenses = [...expenses]
     .filter((item) => {
       const search = searchTerm.toLowerCase();
@@ -158,7 +173,6 @@ export default function ManageExpenses({ onBack, currentUser }) {
       return 0;
     });
 
-  // Calculate Total Expenses
   const totalExpenseSum = processedExpenses.reduce(
     (sum, item) => sum + (parseFloat(item.amount) || 0),
     0
@@ -172,7 +186,6 @@ export default function ManageExpenses({ onBack, currentUser }) {
       }}
     >
       <div className="expenses-container">
-        {/* Header Section */}
         <div className="expenses-header">
           <div className="header-title-group">
             <svg
@@ -196,7 +209,6 @@ export default function ManageExpenses({ onBack, currentUser }) {
           )}
         </div>
 
-        {/* Navigation Tabs */}
         <div className="nav-tabs">
           <button
             className={`tab-btn ${activeTab === "view" ? "active" : ""}`}
@@ -213,7 +225,6 @@ export default function ManageExpenses({ onBack, currentUser }) {
           </button>
         </div>
 
-        {/* TAB 1: VIEW EXPENSES DIRECTORY */}
         {activeTab === "view" && (
           <div className="tab-card">
             <div className="card-header-row">
@@ -288,7 +299,7 @@ export default function ManageExpenses({ onBack, currentUser }) {
                         <td className="id-badge">#{exp.id}</td>
                         <td className="font-semibold">{exp.description}</td>
                         <td className="amount-text">
-                          ${parseFloat(exp.amount).toFixed(2)}
+                          ${parseFloat(exp.amount || 0).toFixed(2)}
                         </td>
                         <td>
                           {exp.created_at
@@ -317,7 +328,6 @@ export default function ManageExpenses({ onBack, currentUser }) {
           </div>
         )}
 
-        {/* TAB 2: RECORD NEW EXPENSE */}
         {activeTab === "add" && (
           <div className="tab-card">
             <h2 className="card-heading">Add New Expense Record</h2>

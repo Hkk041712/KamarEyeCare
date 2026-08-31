@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import bgImage from "./assets/eyecare-bg.jpg";
 import ManageProducts from "./ManageProducts";
 import ManagePatients from "./ManagePatients";
@@ -49,6 +50,15 @@ axios.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Protected Route Guard Component
+function ProtectedRoute({ children }) {
+  const token = localStorage.getItem("accessToken");
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
 
 // Eye Icons
 const EyeOpenIcon = () => (
@@ -102,7 +112,11 @@ const BrandHeader = ({ subtitle }) => (
   </div>
 );
 
-export default function App() {
+// Auth Card Component holding Login & Forgot Password
+function AuthCard() {
+  const navigate = useNavigate();
+  const [view, setView] = useState("login");
+
   const [rememberMe, setRememberMe] = useState(
     () => localStorage.getItem("rememberMe") === "true"
   );
@@ -120,11 +134,15 @@ export default function App() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [view, setView] = useState(() =>
-    localStorage.getItem("accessToken") ? "dashboard" : "login"
-  );
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
+
+  // Auto-redirect if already logged in
+  useEffect(() => {
+    if (localStorage.getItem("accessToken") && view === "login") {
+      navigate("/dashboard");
+    }
+  }, [navigate, view]);
 
   const validateEmailFormat = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -162,8 +180,7 @@ export default function App() {
         localStorage.removeItem("savedUsername");
       }
 
-      setView("dashboard");
-      setMessage("");
+      navigate("/dashboard");
     } catch (err) {
       setMessage(
         err.response?.data?.error || "Login failed. Check your credentials."
@@ -227,26 +244,6 @@ export default function App() {
       setIsError(true);
     }
   };
-
-  const handleLogout = () => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    if (!rememberMe) setUsername("");
-    setPassword("");
-    setView("login");
-  };
-
-  if (view === "manage-products")
-    return <ManageProducts onBack={() => setView("dashboard")} />;
-  if (view === "manage-patients")
-    return <ManagePatients onBack={() => setView("dashboard")} />;
-  if (view === "manage-expenses")
-    return (
-      <ManageExpenses
-        onBack={() => setView("dashboard")}
-        currentUser={username}
-      />
-    );
 
   return (
     <div
@@ -530,56 +527,124 @@ export default function App() {
             )}
           </>
         )}
-
-        {view === "dashboard" && (
-          <>
-            <BrandHeader subtitle="Management Portal" />
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.65rem",
-                marginTop: "0.25rem",
-              }}
-            >
-              <button
-                className="btn-primary"
-                style={{ textAlign: "left", padding: "0.75rem 1rem" }}
-                onClick={() => setView("manage-products")}
-              >
-                <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
-                  Manage Products
-                </span>
-              </button>
-              <button
-                className="btn-primary"
-                style={{ textAlign: "left", padding: "0.75rem 1rem" }}
-                onClick={() => setView("manage-expenses")}
-              >
-                <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
-                  Manage Expenses
-                </span>
-              </button>
-              <button
-                className="btn-primary"
-                style={{ textAlign: "left", padding: "0.75rem 1rem" }}
-                onClick={() => setView("manage-patients")}
-              >
-                <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
-                  Manage Patients
-                </span>
-              </button>
-            </div>
-            <button
-              className="btn-link"
-              style={{ marginTop: "0.25rem", alignSelf: "center" }}
-              onClick={handleLogout}
-            >
-              Log Out
-            </button>
-          </>
-        )}
       </div>
     </div>
+  );
+}
+
+// Dashboard View Component
+function DashboardView({ onLogout }) {
+  const navigate = useNavigate();
+
+  return (
+    <div
+      className="auth-page-wrapper"
+      style={{
+        backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.45), rgba(15, 23, 42, 0.45)), url(${bgImage})`,
+      }}
+    >
+      <div className="auth-card">
+        <BrandHeader subtitle="Management Portal" />
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.65rem",
+            marginTop: "0.25rem",
+          }}
+        >
+          <button
+            className="btn-primary"
+            style={{ textAlign: "left", padding: "0.75rem 1rem" }}
+            onClick={() => navigate("/products")}
+          >
+            <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
+              Manage Products
+            </span>
+          </button>
+          <button
+            className="btn-primary"
+            style={{ textAlign: "left", padding: "0.75rem 1rem" }}
+            onClick={() => navigate("/expenses")}
+          >
+            <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
+              Manage Expenses
+            </span>
+          </button>
+          <button
+            className="btn-primary"
+            style={{ textAlign: "left", padding: "0.75rem 1rem" }}
+            onClick={() => navigate("/patients")}
+          >
+            <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
+              Manage Patients
+            </span>
+          </button>
+        </div>
+        <button
+          className="btn-link"
+          style={{ marginTop: "0.25rem", alignSelf: "center" }}
+          onClick={onLogout}
+        >
+          Log Out
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Main App Router Component
+export default function App() {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    navigate("/login");
+  };
+
+  const username = localStorage.getItem("savedUsername") || "";
+
+  return (
+    <Routes>
+      <Route path="/login" element={<AuthCard />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardView onLogout={handleLogout} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/products"
+        element={
+          <ProtectedRoute>
+            <ManageProducts onBack={() => navigate("/dashboard")} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/patients"
+        element={
+          <ProtectedRoute>
+            <ManagePatients onBack={() => navigate("/dashboard")} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/expenses"
+        element={
+          <ProtectedRoute>
+            <ManageExpenses
+              onBack={() => navigate("/dashboard")}
+              currentUser={username}
+            />
+          </ProtectedRoute>
+        }
+      />
+      {/* Wildcard redirect */}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
   );
 }
