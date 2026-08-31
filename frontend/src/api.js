@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// 1. Fixed URL typo and added /api path
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://kamareyecare.onrender.com/api';
+// Set base URL to backend root
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://kamareyecare.onrender.com';
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -46,7 +46,7 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (originalRequest.url.includes('/token/')) {
+    if (originalRequest.url.includes('/token/') || originalRequest.url.includes('/login/')) {
       return Promise.reject(error);
     }
 
@@ -73,7 +73,7 @@ api.interceptors.response.use(
     }
 
     try {
-      const response = await axios.post(`${BASE_URL}/token/refresh/`, {
+      const response = await axios.post(`${BASE_URL}/auth/token/refresh/`, {
         refresh: refreshToken,
       });
 
@@ -95,14 +95,12 @@ api.interceptors.response.use(
   }
 );
 
-// 2. Fixed GitHub Pages base path routing check
 function handleLogout() {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
   
   const currentPath = window.location.pathname;
   
-  // Safely check if pathname ends with /login or contains /login
   if (!currentPath.endsWith('/login') && !currentPath.includes('/login')) {
     window.location.href = `/KamarEyeCare/login?redirect=${encodeURIComponent(currentPath)}`;
   }
