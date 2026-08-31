@@ -361,6 +361,17 @@ def manage_patients(request, patient_id=None):
         )
         return Response({'message': 'Patient recorded successfully!', 'id': patient.id}, status=status.HTTP_201_CREATED)
 
+    elif request.method == 'DELETE':
+        if not patient_id:
+            return Response({'error': 'Patient ID is required for deletion.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            patient = Patient.objects.get(id=patient_id)
+            patient.delete()
+            return Response({'message': f'Patient {patient_id} deleted successfully.'}, status=status.HTTP_200_OK)
+        except Patient.DoesNotExist:
+            return Response({'error': 'Patient not found.'}, status=status.HTTP_404_NOT_FOUND)
+
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
