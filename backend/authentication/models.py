@@ -1,14 +1,26 @@
+import uuid
 import secrets
 from django.db import models
+from django.utils import timezone
+from django.core.validators import MinValueValidator
 
 def default_secret():
     return secrets.token_hex(32)
+
+def generate_product_id():
+    return f"PRD{uuid.uuid4().hex[:8].upper()}"
+
+def generate_sale_id():
+    return f"SLS{uuid.uuid4().hex[:8].upper()}"
+
+def generate_patient_id():
+    return f"PAT{uuid.uuid4().hex[:8].upper()}"
 
 class User(models.Model):
     id = models.CharField(max_length=20, primary_key=True)
     username = models.EmailField(unique=True)
     password_hash = models.CharField(max_length=128)
-    reset_otp = models.CharField(max_length=6, null=True, blank=True)
+    reset_otp = models.CharField(max_length=128, null=True, blank=True)
     reset_otp_created_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -19,12 +31,12 @@ class User(models.Model):
 
 
 class Product(models.Model):
-    id = models.CharField(max_length=20, primary_key=True)
+    id = models.CharField(max_length=36, primary_key=True, default=generate_product_id)
     name = models.CharField(max_length=255)
     category = models.CharField(max_length=100)
-    quantity = models.IntegerField(default=0)
-    buy_price = models.DecimalField(max_digits=10, decimal_places=2)
-    sell_price = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    buy_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    sell_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     created_at = models.DateField(auto_now_add=True)
 
     class Meta:
@@ -35,12 +47,12 @@ class Product(models.Model):
 
 
 class Sale(models.Model):
-    id = models.CharField(max_length=20, primary_key=True)
+    id = models.CharField(max_length=36, primary_key=True, default=generate_sale_id)
     product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True)
-    quantity = models.IntegerField()
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
-    total = models.DecimalField(max_digits=10, decimal_places=2)
-    created_at = models.DateField(auto_now_add=True)
+    quantity = models.IntegerField(validators=[MinValueValidator(1)])
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    total = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    created_at = models.DateField(default=timezone.now)
 
     class Meta:
         db_table = 'sales'
@@ -48,27 +60,25 @@ class Sale(models.Model):
     def __str__(self):
         prod_name = self.product.name if self.product else "Deleted Product"
         return f"{self.id} - {prod_name}"
-    
+
+
 class Patient(models.Model):
-    id = models.CharField(max_length=20, primary_key=True)
+    id = models.CharField(max_length=36, primary_key=True, default=generate_patient_id)
     full_name = models.CharField(max_length=255)
     phone = models.CharField(max_length=50, blank=True, null=True)
     email = models.CharField(max_length=255, blank=True, null=True)
     medical_history = models.TextField(blank=True, null=True)
     prescription_details = models.TextField(blank=True, null=True)
     
-    # Add Eyewear Choices
     frame_chosen = models.CharField(max_length=255, blank=True, null=True)
     lens_chosen = models.CharField(max_length=255, blank=True, null=True)
     others_chosen = models.CharField(max_length=255, blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
 
-    # Add Power Fields (Right Eye - OD)
     power_right_sphere = models.CharField(max_length=50, blank=True, null=True)
     power_right_cylinder = models.CharField(max_length=50, blank=True, null=True)
     power_right_addition = models.CharField(max_length=50, blank=True, null=True)
 
-    # Add Power Fields (Left Eye - OS)
     power_left_sphere = models.CharField(max_length=50, blank=True, null=True)
     power_left_cylinder = models.CharField(max_length=50, blank=True, null=True)
     power_left_addition = models.CharField(max_length=50, blank=True, null=True)
@@ -78,7 +88,8 @@ class Patient(models.Model):
 
     class Meta:
         db_table = 'patients'
-        
+
+
 class Expense(models.Model):
     id = models.AutoField(primary_key=True)
     description = models.CharField(max_length=255)
@@ -92,4 +103,3 @@ class Expense(models.Model):
 
     def __str__(self):
         return f"{self.description} - ${self.amount}"
-    
