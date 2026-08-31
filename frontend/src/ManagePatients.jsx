@@ -3,7 +3,8 @@ import axios from "axios";
 import bgImage from "./assets/eyecare-bg.jpg";
 import "./ManagePatients.css";
 
-const API_BASE_URL = "http://127.0.0.1:8000/api/auth";
+// Correct base endpoint URL
+const API_BASE_URL = "http://127.0.0.1:8000/api";
 
 const getAuthHeaders = () => {
   const token =
@@ -19,9 +20,6 @@ const getAuthHeaders = () => {
 
 export default function ManagePatients({ onBack }) {
   const [activeTab, setActiveTab] = useState("view");
-
-  const [frames, setFrames] = useState([]);
-  const [lenses, setLenses] = useState([]);
 
   const [patientForm, setPatientForm] = useState({
     first_name: "",
@@ -67,44 +65,18 @@ export default function ManagePatients({ onBack }) {
     }
   }, []);
 
-  const fetchProducts = useCallback(async () => {
-    try {
-      const res = await axios.get(
-        `${API_BASE_URL}/products/`,
-        getAuthHeaders()
-      );
-      const allProducts = res.data?.results || res.data || [];
-
-      const filteredFrames = allProducts.filter(
-        (p) => p.category && p.category.toLowerCase() === "frames"
-      );
-
-      const filteredLenses = allProducts.filter((p) => {
-        if (!p.category) return false;
-        const cat = p.category.toLowerCase();
-        return cat === "lenses" || cat === "contact lenses";
-      });
-
-      setFrames(filteredFrames);
-      setLenses(filteredLenses);
-    } catch (err) {
-      console.error("Failed to fetch products from DB:", err);
-    }
-  }, []);
-
   useEffect(() => {
     let isMounted = true;
     const loadData = async () => {
       if (isMounted) {
         await fetchPatients();
-        await fetchProducts();
       }
     };
     loadData();
     return () => {
       isMounted = false;
     };
-  }, [fetchPatients, fetchProducts]);
+  }, [fetchPatients]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -428,18 +400,18 @@ export default function ManagePatients({ onBack }) {
                           <span className="choice-tag frame">
                             {typeof p.frame_chosen === "object"
                               ? p.frame_chosen?.brand || p.frame_chosen?.name
-                              : p.frame_chosen || p.frame || "N/A"}
+                              : p.frame_chosen || p.frame || "-"}
                           </span>
                         </td>
                         <td>
                           <span className="choice-tag lens">
                             {typeof p.lens_chosen === "object"
                               ? p.lens_chosen?.type || p.lens_chosen?.name
-                              : p.lens_chosen || p.lens || "N/A"}
+                              : p.lens_chosen || p.lens || "-"}
                           </span>
                         </td>
                         <td>
-                          {p.created_at ? p.created_at.split("T")[0] : "N/A"}
+                          {p.created_at ? p.created_at.split("T")[0] : "-"}
                         </td>
                         <td>
                           <div className="action-btn-group">
@@ -495,7 +467,6 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.first_name}
                     onChange={handleInputChange}
                     placeholder="e.g. Hassan"
-                    
                   />
                 </div>
 
@@ -520,7 +491,6 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.last_name}
                     onChange={handleInputChange}
                     placeholder="e.g. Kamar"
-                    
                   />
                 </div>
 
@@ -548,61 +518,36 @@ export default function ManagePatients({ onBack }) {
                       value={patientForm.phone}
                       onChange={handleInputChange}
                       placeholder="e.g. 70 123 456"
-                      
                     />
                   </div>
                 </div>
 
                 <div className="input-group">
                   <label className="input-label">Frame Chosen</label>
-                  <select
+                  <input
+                    type="text"
                     name="frame_chosen"
                     className="patients-input"
                     value={patientForm.frame_chosen}
                     onChange={handleInputChange}
-                    
-                  >
-                    <option value=""> Select Frame </option>
-                    {frames.map((frame) => {
-                      const label = frame.brand
-                        ? `${frame.brand} ${frame.model || ""}`
-                        : frame.name || `Frame #${frame.id}`;
-                      return (
-                        <option key={frame.id} value={label}>
-                          {label}
-                        </option>
-                      );
-                    })}
-                  </select>
+                    placeholder="e.g. Ray-Ban RB5154"
+                  />
                 </div>
 
                 <div className="input-group">
                   <label className="input-label">Lens Chosen</label>
-                  <select
+                  <input
+                    type="text"
                     name="lens_chosen"
                     className="patients-input"
                     value={patientForm.lens_chosen}
                     onChange={handleInputChange}
-                    
-                  >
-                    <option value="">Select Lens</option>
-                    {lenses.map((lens) => {
-                      const label = lens.type
-                        ? `${lens.type} ${lens.index ? `(${lens.index})` : ""}`
-                        : lens.name || `Lens #${lens.id}`;
-                      return (
-                        <option key={lens.id} value={label}>
-                          {label}
-                        </option>
-                      );
-                    })}
-                  </select>
+                    placeholder="e.g. Progressive Anti-Reflective 1.67"
+                  />
                 </div>
 
                 <div className="input-group">
-                  <label className="input-label">
-                    Others Chosen 
-                  </label>
+                  <label className="input-label">Others Chosen</label>
                   <input
                     type="text"
                     name="others_chosen"
@@ -614,9 +559,7 @@ export default function ManagePatients({ onBack }) {
                 </div>
 
                 <div className="input-group">
-                  <label className="input-label">
-                    General Notes 
-                  </label>
+                  <label className="input-label">General Notes</label>
                   <input
                     type="text"
                     name="notes"
@@ -645,7 +588,6 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.power_right_sphere}
                     onChange={handleInputChange}
                     placeholder="-2.00 / +1.50"
-                    
                   />
                 </div>
                 <div className="input-group">
@@ -657,7 +599,6 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.power_right_cylinder}
                     onChange={handleInputChange}
                     placeholder="-0.50"
-                    
                   />
                 </div>
                 <div className="input-group">
@@ -669,7 +610,6 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.power_right_addition}
                     onChange={handleInputChange}
                     placeholder="+2.00"
-                    
                   />
                 </div>
               </div>
@@ -687,7 +627,6 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.power_left_sphere}
                     onChange={handleInputChange}
                     placeholder="-1.75 / +1.25"
-                    
                   />
                 </div>
                 <div className="input-group">
@@ -699,7 +638,6 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.power_left_cylinder}
                     onChange={handleInputChange}
                     placeholder="-0.75"
-                    
                   />
                 </div>
                 <div className="input-group">
@@ -711,15 +649,12 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.power_left_addition}
                     onChange={handleInputChange}
                     placeholder="+2.00"
-                    
                   />
                 </div>
               </div>
 
               <div className="input-group" style={{ marginTop: "1rem" }}>
-                <label className="input-label">
-                  Prescription Notes 
-                </label>
+                <label className="input-label">Prescription Notes</label>
                 <input
                   type="text"
                   name="power_notes"
@@ -765,26 +700,30 @@ export default function ManagePatients({ onBack }) {
                 </div>
                 <div className="info-row">
                   <span className="info-label">Phone:</span>
-                  <span className="info-val">{selectedPatient.phone}</span>
+                  <span className="info-val">
+                    {selectedPatient.phone || "-"}
+                  </span>
                 </div>
                 <div className="info-row">
                   <span className="info-label">Registered On:</span>
                   <span className="info-val">
                     {selectedPatient.created_at
                       ? selectedPatient.created_at.split("T")[0]
-                      : "N/A"}
+                      : "-"}
                   </span>
                 </div>
                 <div className="info-row">
                   <span className="info-label">Frame Selected:</span>
                   <span className="info-val highlight">
-                    {selectedPatient.frame_chosen || selectedPatient.frame}
+                    {selectedPatient.frame_chosen ||
+                      selectedPatient.frame ||
+                      "-"}
                   </span>
                 </div>
                 <div className="info-row">
                   <span className="info-label">Lens Selected:</span>
                   <span className="info-val highlight">
-                    {selectedPatient.lens_chosen || selectedPatient.lens}
+                    {selectedPatient.lens_chosen || selectedPatient.lens || "-"}
                   </span>
                 </div>
                 {selectedPatient.others_chosen && (
@@ -823,17 +762,17 @@ export default function ManagePatients({ onBack }) {
                         <td>
                           {selectedPatient.power_right_sphere ||
                             selectedPatient.od_sph ||
-                            "0.00"}
+                            "-"}
                         </td>
                         <td>
                           {selectedPatient.power_right_cylinder ||
                             selectedPatient.od_cyl ||
-                            "0.00"}
+                            "-"}
                         </td>
                         <td>
                           {selectedPatient.power_right_addition ||
                             selectedPatient.od_add ||
-                            "0.00"}
+                            "-"}
                         </td>
                       </tr>
                       <tr>
@@ -841,17 +780,17 @@ export default function ManagePatients({ onBack }) {
                         <td>
                           {selectedPatient.power_left_sphere ||
                             selectedPatient.os_sph ||
-                            "0.00"}
+                            "-"}
                         </td>
                         <td>
                           {selectedPatient.power_left_cylinder ||
                             selectedPatient.os_cyl ||
-                            "0.00"}
+                            "-"}
                         </td>
                         <td>
                           {selectedPatient.power_left_addition ||
                             selectedPatient.os_add ||
-                            "0.00"}
+                            "-"}
                         </td>
                       </tr>
                     </tbody>
