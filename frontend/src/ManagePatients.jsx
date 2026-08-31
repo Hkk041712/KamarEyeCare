@@ -1,22 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import api from "./api"; // Use configured Axios instance from api.js
 import bgImage from "./assets/eyecare-bg.jpg";
 import "./ManagePatients.css";
-
-// Correct base endpoint URL
-const API_BASE_URL = "http://127.0.0.1:8000/api";
-
-const getAuthHeaders = () => {
-  const token =
-    localStorage.getItem("token") || localStorage.getItem("authToken");
-  return {
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    withCredentials: true,
-  };
-};
 
 export default function ManagePatients({ onBack }) {
   const [activeTab, setActiveTab] = useState("view");
@@ -53,10 +38,7 @@ export default function ManagePatients({ onBack }) {
   const fetchPatients = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/patients/`,
-        getAuthHeaders()
-      );
+      const response = await api.get("/patients/");
       setPatients(response.data?.results || response.data || []);
     } catch (err) {
       console.error("Failed to fetch patients:", err);
@@ -118,21 +100,13 @@ export default function ManagePatients({ onBack }) {
       full_name: fullName,
       patient_id: generatedId,
       phone: formattedPhone,
-      frame: patientForm.frame_chosen,
       frame_chosen: patientForm.frame_chosen,
-      lens: patientForm.lens_chosen,
       lens_chosen: patientForm.lens_chosen,
       others_chosen: patientForm.others_chosen,
       notes: patientForm.notes,
-      od_sph: patientForm.power_right_sphere,
-      od_cyl: patientForm.power_right_cylinder,
-      od_add: patientForm.power_right_addition,
       power_right_sphere: patientForm.power_right_sphere,
       power_right_cylinder: patientForm.power_right_cylinder,
       power_right_addition: patientForm.power_right_addition,
-      os_sph: patientForm.power_left_sphere,
-      os_cyl: patientForm.power_left_cylinder,
-      os_add: patientForm.power_left_addition,
       power_left_sphere: patientForm.power_left_sphere,
       power_left_cylinder: patientForm.power_left_cylinder,
       power_left_addition: patientForm.power_left_addition,
@@ -140,11 +114,7 @@ export default function ManagePatients({ onBack }) {
     };
 
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/patients/`,
-        payload,
-        getAuthHeaders()
-      );
+      const response = await api.post("/patients/", payload);
       setStatusMsg({
         text: response.data?.message || "Patient recorded successfully!",
         isError: false,
@@ -188,10 +158,7 @@ export default function ManagePatients({ onBack }) {
       return;
 
     try {
-      await axios.delete(
-        `${API_BASE_URL}/patients/${patientId}/`,
-        getAuthHeaders()
-      );
+      await api.delete(`/patients/${patientId}/`);
       setStatusMsg({
         text: "Patient record deleted successfully!",
         isError: false,
