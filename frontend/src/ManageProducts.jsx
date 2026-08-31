@@ -43,40 +43,40 @@ export default function ManageProducts({ onBack }) {
 
   const [debugError, setDebugError] = useState("");
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [prodRes, salesRes] = await Promise.allSettled([
-        api.get("/auth/products/"),
-        api.get("/auth/sales/"),
-      ]);
+const fetchData = useCallback(async () => {
+  setLoading(true);
+  try {
+    const [prodRes, salesRes] = await Promise.allSettled([
+      api.get("/products/"),
+      api.get("/sales/"),
+    ]);
 
-      if (prodRes.status === "fulfilled") {
-        const rawProducts = prodRes.value.data;
-        const prodList = Array.isArray(rawProducts)
-          ? rawProducts
-          : rawProducts?.results || [];
-        setProducts(prodList);
-      } else {
-        console.error("Failed to load products:", prodRes.reason);
-      }
-
-      if (salesRes.status === "fulfilled") {
-        const rawSales = salesRes.value.data;
-        const salesList = Array.isArray(rawSales)
-          ? rawSales
-          : rawSales?.results || [];
-        setSales(salesList);
-      } else {
-        console.error("Failed to load sales:", salesRes.reason);
-      }
-    } catch (err) {
-      console.error("Error fetching data:", err);
-      setDebugError(err.message || "Failed to fetch inventory data.");
-    } finally {
-      setLoading(false);
+    if (prodRes.status === "fulfilled") {
+      const rawProducts = prodRes.value.data;
+      const prodList = Array.isArray(rawProducts)
+        ? rawProducts
+        : rawProducts?.results || [];
+      setProducts(prodList);
+    } else {
+      console.error("Failed to load products:", prodRes.reason);
     }
-  }, []);
+
+    if (salesRes.status === "fulfilled") {
+      const rawSales = salesRes.value.data;
+      const salesList = Array.isArray(rawSales)
+        ? rawSales
+        : rawSales?.results || [];
+      setSales(salesList);
+    } else {
+      console.error("Failed to load sales:", salesRes.reason);
+    }
+  } catch (err) {
+    console.error("Error fetching data:", err);
+    setDebugError(err.message || "Failed to fetch inventory data.");
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   useEffect(() => {
     let isMounted = true;

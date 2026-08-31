@@ -74,7 +74,8 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    try {
+try {
+      // Ensure path matches Django simplejwt URL configuration
       const response = await axios.post(`${BASE_URL}/auth/token/refresh/`, {
         refresh: refreshToken,
       });
