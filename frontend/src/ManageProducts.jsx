@@ -794,7 +794,7 @@ export default function ManageProducts({ onBack }) {
                       onClick={() => requestSalesSort("product_id")}
                       className="sortable-th"
                     >
-                      Product ID
+                      Product Name
                       {getSortIndicator(salesSortConfig, "product_id")}
                     </th>
                     <th
@@ -842,11 +842,17 @@ export default function ManageProducts({ onBack }) {
                     processedSales.map((s) => (
                       <tr key={s.id}>
                         <td className="id-badge">{s.id}</td>
-                        <td className="font-semibold">
-                          {s.product_name
-                            ? `${s.product_name} (${s.product_id || s.product})`
-                            : s.product_id || s.product}
-                        </td>
+<td className="font-semibold">
+  {s.product_name ? (
+    (s.product_id || s.product) ? (
+      `${s.product_name} (${s.product_id || s.product})`
+    ) : (
+      s.product_name
+    )
+  ) : (
+    s.product_id || s.product || "Deleted Product"
+  )}
+</td>
                         <td>{s.quantity}</td>
                         <td>${parseFloat(s.unit_price || 0).toFixed(2)}</td>
                         <td className="price-highlight">
