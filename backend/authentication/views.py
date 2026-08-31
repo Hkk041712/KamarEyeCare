@@ -260,14 +260,13 @@ def manage_sales(request):
                     total=total_amount
                 )
 
-                # Update product stock
+                # Deduct stock safely without breaking foreign key integrity
                 product.quantity -= quantity
+                product.save()
 
-                if product.quantity <= 0:
-                    product.delete()
-                    msg = 'Sale recorded successfully! Stock reached 0 and the product was automatically removed from inventory.'
+                if product.quantity == 0:
+                    msg = f'Sale recorded! Stock for {product.name} has reached 0.'
                 else:
-                    product.save()
                     msg = f'Sale recorded! Remaining stock for {product.name}: {product.quantity}'
 
                 return Response({'message': msg, 'sale_id': sale.id}, status=status.HTTP_201_CREATED)

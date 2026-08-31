@@ -165,71 +165,53 @@ export default function ManageProducts({ onBack }) {
     }));
   };
 
-const handleAddSale = async (e) => {
-  e.preventDefault();
-  setStatusMsg({ text: "", isError: false });
-  setDebugError("");
+  const handleAddSale = async (e) => {
+    e.preventDefault();
+    setStatusMsg({ text: "", isError: false });
 
-  if (!saleForm.product_id) {
-    setStatusMsg({
-      text: "Please select a product from inventory.",
-      isError: true,
-    });
-    return;
-  }
-
-  try {
-    const parsedQty = parseInt(saleForm.quantity, 10);
-    const parsedPrice = parseFloat(saleForm.unit_price);
-
-    const response = await api.post("/auth/sales/", {
-      product_id: saleForm.product_id,
-      quantity: parsedQty,
-      unit_price: parsedPrice,
-      created_at: saleForm.created_at,
-    });
-
-    setStatusMsg({
-      text: response.data?.message || "Sale recorded and stock updated!",
-      isError: false,
-    });
-    setSaleForm({
-      product_id: "",
-      quantity: 1,
-      unit_price: "",
-      created_at: new Date().toISOString().split("T")[0],
-    });
-    setSelectedProduct(null);
-    fetchData();
-    setTimeout(() => setActiveTab("income"), 1200);
-  } catch (err) {
-    console.error("Sale Recording Error:", err);
-
-    // Extract full error payload from backend response
-    const serverError = err.response?.data;
-    let detailedMsg = "";
-
-    if (typeof serverError === "string") {
-      detailedMsg = serverError;
-    } else if (serverError && typeof serverError === "object") {
-      detailedMsg =
-        serverError.error || serverError.detail || JSON.stringify(serverError);
-    } else {
-      detailedMsg = err.message || "Unknown error occurred.";
+    if (!saleForm.product_id) {
+      setStatusMsg({
+        text: "Please select a product from inventory.",
+        isError: true,
+      });
+      return;
     }
 
-    const formattedError = `Sale Error (${
-      err.response?.status || "Network Error"
-    }): ${detailedMsg}`;
+    try {
+      const parsedQty = parseInt(saleForm.quantity, 10);
+      const parsedPrice = parseFloat(saleForm.unit_price);
 
-    // Update both the status message banner and top debug container
-    setStatusMsg({
-      text: formattedError,
-      isError: true,
-    });
-    setDebugError(formattedError);
-  }
-};
+      const response = await api.post("/auth/sales/", {
+        product_id: saleForm.product_id,
+        quantity: parsedQty,
+        unit_price: parsedPrice,
+        created_at: saleForm.created_at,
+      });
+
+      setStatusMsg({
+        text: response.data?.message || "Sale recorded and stock updated!",
+        isError: false,
+      });
+      setSaleForm({
+        product_id: "",
+        quantity: 1,
+        unit_price: "",
+        created_at: new Date().toISOString().split("T")[0],
+      });
+      setSelectedProduct(null);
+      fetchData();
+      setTimeout(() => setActiveTab("income"), 1200);
+    } catch (err) {
+      setStatusMsg({
+        text:
+          err.response?.data?.detail ||
+          err.response?.data?.error ||
+          "Failed to record sale transaction.",
+        isError: true,
+      });
+    }
+  };
+
   const requestProdSort = (key) => {
     let direction = "asc";
     if (prodSortConfig.key === key && prodSortConfig.direction === "asc") {
@@ -277,43 +259,43 @@ const handleAddSale = async (e) => {
       return 0;
     });
 
-  const processedSales = [...sales]
-    .filter(
-      (s) =>
-        String(s.id || "")
-          .toLowerCase()
-          .includes(salesSearchTerm.toLowerCase()) ||
-        String(s.product_id || s.product || "")
-          .toLowerCase()
-          .includes(salesSearchTerm.toLowerCase()) ||
-        String(s.created_at || "")
-          .toLowerCase()
-          .includes(salesSearchTerm.toLowerCase())
-    )
-    .sort((a, b) => {
-      const { key, direction } = salesSortConfig;
-      let aVal = a[key] ?? "";
-      let bVal = b[key] ?? "";
+ const processedSales = [...sales]
+   .filter(
+     (s) =>
+       String(s.id || "")
+         .toLowerCase()
+         .includes(salesSearchTerm.toLowerCase()) ||
+       String(s.product_name || s.product_id || s.product || "")
+         .toLowerCase()
+         .includes(salesSearchTerm.toLowerCase()) ||
+       String(s.created_at || "")
+         .toLowerCase()
+         .includes(salesSearchTerm.toLowerCase())
+   )
+   .sort((a, b) => {
+     const { key, direction } = salesSortConfig;
+     let aVal = a[key] ?? "";
+     let bVal = b[key] ?? "";
 
-      if (key === "total") {
-        aVal =
-          a.total ??
-          (parseFloat(a.unit_price) || 0) * (parseInt(a.quantity, 10) || 0);
-        bVal =
-          b.total ??
-          (parseFloat(a.unit_price) || 0) * (parseInt(a.quantity, 10) || 0);
-      } else if (key === "quantity" || key === "unit_price") {
-        aVal = parseFloat(aVal) || 0;
-        bVal = parseFloat(bVal) || 0;
-      } else {
-        aVal = String(aVal).toLowerCase();
-        bVal = String(bVal).toLowerCase();
-      }
+     if (key === "total") {
+       aVal =
+         a.total ??
+         (parseFloat(a.unit_price) || 0) * (parseInt(a.quantity, 10) || 0);
+       bVal =
+         b.total ??
+         (parseFloat(b.unit_price) || 0) * (parseInt(b.quantity, 10) || 0);
+     } else if (key === "quantity" || key === "unit_price") {
+       aVal = parseFloat(aVal) || 0;
+       bVal = parseFloat(bVal) || 0;
+     } else {
+       aVal = String(aVal).toLowerCase();
+       bVal = String(bVal).toLowerCase();
+     }
 
-      if (aVal < bVal) return direction === "asc" ? -1 : 1;
-      if (aVal > bVal) return direction === "asc" ? 1 : -1;
-      return 0;
-    });
+     if (aVal < bVal) return direction === "asc" ? -1 : 1;
+     if (aVal > bVal) return direction === "asc" ? 1 : -1;
+     return 0;
+   });
 
   const getSortIndicator = (config, key) => {
     if (config.key !== key) return " ↕";
