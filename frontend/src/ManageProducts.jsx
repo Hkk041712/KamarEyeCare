@@ -165,53 +165,71 @@ export default function ManageProducts({ onBack }) {
     }));
   };
 
-  const handleAddSale = async (e) => {
-    e.preventDefault();
-    setStatusMsg({ text: "", isError: false });
+const handleAddSale = async (e) => {
+  e.preventDefault();
+  setStatusMsg({ text: "", isError: false });
+  setDebugError("");
 
-    if (!saleForm.product_id) {
-      setStatusMsg({
-        text: "Please select a product from inventory.",
-        isError: true,
-      });
-      return;
+  if (!saleForm.product_id) {
+    setStatusMsg({
+      text: "Please select a product from inventory.",
+      isError: true,
+    });
+    return;
+  }
+
+  try {
+    const parsedQty = parseInt(saleForm.quantity, 10);
+    const parsedPrice = parseFloat(saleForm.unit_price);
+
+    const response = await api.post("/auth/sales/", {
+      product_id: saleForm.product_id,
+      quantity: parsedQty,
+      unit_price: parsedPrice,
+      created_at: saleForm.created_at,
+    });
+
+    setStatusMsg({
+      text: response.data?.message || "Sale recorded and stock updated!",
+      isError: false,
+    });
+    setSaleForm({
+      product_id: "",
+      quantity: 1,
+      unit_price: "",
+      created_at: new Date().toISOString().split("T")[0],
+    });
+    setSelectedProduct(null);
+    fetchData();
+    setTimeout(() => setActiveTab("income"), 1200);
+  } catch (err) {
+    console.error("Sale Recording Error:", err);
+
+    // Extract full error payload from backend response
+    const serverError = err.response?.data;
+    let detailedMsg = "";
+
+    if (typeof serverError === "string") {
+      detailedMsg = serverError;
+    } else if (serverError && typeof serverError === "object") {
+      detailedMsg =
+        serverError.error || serverError.detail || JSON.stringify(serverError);
+    } else {
+      detailedMsg = err.message || "Unknown error occurred.";
     }
 
-    try {
-      const parsedQty = parseInt(saleForm.quantity, 10);
-      const parsedPrice = parseFloat(saleForm.unit_price);
+    const formattedError = `Sale Error (${
+      err.response?.status || "Network Error"
+    }): ${detailedMsg}`;
 
-      const response = await api.post("/auth/sales/", {
-        product_id: saleForm.product_id,
-        quantity: parsedQty,
-        unit_price: parsedPrice,
-        created_at: saleForm.created_at,
-      });
-
-      setStatusMsg({
-        text: response.data?.message || "Sale recorded and stock updated!",
-        isError: false,
-      });
-      setSaleForm({
-        product_id: "",
-        quantity: 1,
-        unit_price: "",
-        created_at: new Date().toISOString().split("T")[0],
-      });
-      setSelectedProduct(null);
-      fetchData();
-      setTimeout(() => setActiveTab("income"), 1200);
-    } catch (err) {
-      setStatusMsg({
-        text:
-          err.response?.data?.detail ||
-          err.response?.data?.error ||
-          "Failed to record sale transaction.",
-        isError: true,
-      });
-    }
-  };
-
+    // Update both the status message banner and top debug container
+    setStatusMsg({
+      text: formattedError,
+      isError: true,
+    });
+    setDebugError(formattedError);
+  }
+};
   const requestProdSort = (key) => {
     let direction = "asc";
     if (prodSortConfig.key === key && prodSortConfig.direction === "asc") {
