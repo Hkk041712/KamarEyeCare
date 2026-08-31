@@ -45,38 +45,37 @@ export default function ManageProducts({ onBack }) {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    setDebugError("");
+    try {
+      const [prodRes, salesRes] = await Promise.allSettled([
+        api.get("/auth/products/"),
+        api.get("/auth/sales/"),
+      ]);
 
-    const [prodRes, salesRes] = await Promise.allSettled([
-      api.get("/auth/products/"),
-      api.get("/auth/sales/"),
-    ]);
+      if (prodRes.status === "fulfilled") {
+        const rawProducts = prodRes.value.data;
+        const prodList = Array.isArray(rawProducts)
+          ? rawProducts
+          : rawProducts?.results || [];
+        setProducts(prodList);
+      } else {
+        console.error("Failed to load products:", prodRes.reason);
+      }
 
-    if (prodRes.status === "fulfilled") {
-      setProducts(prodRes.value.data?.results || prodRes.value.data || []);
-    } else {
-      console.error("Failed to load products:", prodRes.reason);
-      const errData = prodRes.reason?.response?.data;
-      const errMsg =
-        typeof errData === "string"
-          ? errData
-          : JSON.stringify(errData) || prodRes.reason?.message;
-      setDebugError((prev) => prev + ` [Products Error: ${errMsg}]`);
+      if (salesRes.status === "fulfilled") {
+        const rawSales = salesRes.value.data;
+        const salesList = Array.isArray(rawSales)
+          ? rawSales
+          : rawSales?.results || [];
+        setSales(salesList);
+      } else {
+        console.error("Failed to load sales:", salesRes.reason);
+      }
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setDebugError(err.message || "Failed to fetch inventory data.");
+    } finally {
+      setLoading(false);
     }
-
-    if (salesRes.status === "fulfilled") {
-      setSales(salesRes.value.data?.results || salesRes.value.data || []);
-    } else {
-      console.error("Failed to load sales:", salesRes.reason);
-      const errData = salesRes.reason?.response?.data;
-      const errMsg =
-        typeof errData === "string"
-          ? errData
-          : JSON.stringify(errData) || salesRes.reason?.message;
-      setDebugError((prev) => prev + ` [Sales Error: ${errMsg}]`);
-    }
-
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -100,14 +99,26 @@ export default function ManageProducts({ onBack }) {
     e.preventDefault();
     setStatusMsg({ text: "", isError: false });
 
+    const parsedQty = parseInt(productForm.quantity, 10);
+    const parsedBuy = parseFloat(productForm.buy_price);
+    const parsedSell = parseFloat(productForm.sell_price);
+
+    if (parsedQty < 0 || parsedBuy < 0 || parsedSell < 0) {
+      setStatusMsg({
+        text: "Stock quantity and prices must be zero or greater.",
+        isError: true,
+      });
+      return;
+    }
+
     try {
       const response = await api.post("/auth/products/", {
         id: productForm.id.trim(),
         name: productForm.name,
         category: productForm.category,
-        quantity: parseInt(productForm.quantity, 10),
-        buy_price: parseFloat(productForm.buy_price),
-        sell_price: parseFloat(productForm.sell_price),
+        quantity: parsedQty,
+        buy_price: parsedBuy,
+        sell_price: parsedSell,
       });
 
       setStatusMsg({
@@ -125,13 +136,12 @@ export default function ManageProducts({ onBack }) {
       fetchData();
       setTimeout(() => setActiveTab("view"), 1200);
     } catch (err) {
-      setStatusMsg({
-        text:
-          err.response?.data?.detail ||
-          err.response?.data?.error ||
-          "Failed to add product.",
-        isError: true,
-      });
+      const msg =
+        err.response?.data?.detail ||
+        err.response?.data?.error ||
+        "Failed to add product.";
+      setStatusMsg({ text: msg, isError: true });
+      setDebugError(msg);
     }
   };
 
@@ -146,11 +156,12 @@ export default function ManageProducts({ onBack }) {
       setStatusMsg({ text: "Product deleted successfully!", isError: false });
       fetchData();
     } catch (err) {
-      alert(
+      const msg =
         err.response?.data?.detail ||
-          err.response?.data?.error ||
-          "Failed to delete product."
-      );
+        err.response?.data?.error ||
+        "Failed to delete product.";
+      alert(msg);
+      setDebugError(msg);
     }
   };
 
@@ -202,13 +213,12 @@ export default function ManageProducts({ onBack }) {
       fetchData();
       setTimeout(() => setActiveTab("income"), 1200);
     } catch (err) {
-      setStatusMsg({
-        text:
-          err.response?.data?.detail ||
-          err.response?.data?.error ||
-          "Failed to record sale transaction.",
-        isError: true,
-      });
+      const msg =
+        err.response?.data?.detail ||
+        err.response?.data?.error ||
+        "Failed to record sale transaction.";
+      setStatusMsg({ text: msg, isError: true });
+      setDebugError(msg);
     }
   };
 
@@ -259,43 +269,51 @@ export default function ManageProducts({ onBack }) {
       return 0;
     });
 
- const processedSales = [...sales]
-   .filter(
-     (s) =>
-       String(s.id || "")
-         .toLowerCase()
-         .includes(salesSearchTerm.toLowerCase()) ||
-       String(s.product_name || s.product_id || s.product || "")
-         .toLowerCase()
-         .includes(salesSearchTerm.toLowerCase()) ||
-       String(s.created_at || "")
-         .toLowerCase()
-         .includes(salesSearchTerm.toLowerCase())
-   )
-   .sort((a, b) => {
-     const { key, direction } = salesSortConfig;
-     let aVal = a[key] ?? "";
-     let bVal = b[key] ?? "";
+  const processedSales = [...sales]
+    .filter(
+      (s) =>
+        String(s.id || "")
+          .toLowerCase()
+          .includes(salesSearchTerm.toLowerCase()) ||
+        String(s.product_name || s.product_id || s.product || "")
+          .toLowerCase()
+          .includes(salesSearchTerm.toLowerCase()) ||
+        String(s.created_at || "")
+          .toLowerCase()
+          .includes(salesSearchTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      const { key, direction } = salesSortConfig;
+      let aVal, bVal;
 
-     if (key === "total") {
-       aVal =
-         a.total ??
-         (parseFloat(a.unit_price) || 0) * (parseInt(a.quantity, 10) || 0);
-       bVal =
-         b.total ??
-         (parseFloat(b.unit_price) || 0) * (parseInt(b.quantity, 10) || 0);
-     } else if (key === "quantity" || key === "unit_price") {
-       aVal = parseFloat(aVal) || 0;
-       bVal = parseFloat(bVal) || 0;
-     } else {
-       aVal = String(aVal).toLowerCase();
-       bVal = String(bVal).toLowerCase();
-     }
+      // FIX: Handle product_id fallback between s.product_id and s.product
+      if (key === "product_id") {
+        aVal = a.product_id ?? a.product ?? "";
+        bVal = b.product_id ?? b.product ?? "";
+      } else if (key === "total") {
+        aVal =
+          a.total ??
+          (parseFloat(a.unit_price) || 0) * (parseInt(a.quantity, 10) || 0);
+        bVal =
+          b.total ??
+          (parseFloat(b.unit_price) || 0) * (parseInt(b.quantity, 10) || 0);
+      } else {
+        aVal = a[key] ?? "";
+        bVal = b[key] ?? "";
+      }
 
-     if (aVal < bVal) return direction === "asc" ? -1 : 1;
-     if (aVal > bVal) return direction === "asc" ? 1 : -1;
-     return 0;
-   });
+      if (key === "quantity" || key === "unit_price" || key === "total") {
+        aVal = parseFloat(aVal) || 0;
+        bVal = parseFloat(bVal) || 0;
+      } else {
+        aVal = String(aVal).toLowerCase();
+        bVal = String(bVal).toLowerCase();
+      }
+
+      if (aVal < bVal) return direction === "asc" ? -1 : 1;
+      if (aVal > bVal) return direction === "asc" ? 1 : -1;
+      return 0;
+    });
 
   const getSortIndicator = (config, key) => {
     if (config.key !== key) return " ↕";
