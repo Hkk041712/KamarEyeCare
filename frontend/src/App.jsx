@@ -108,42 +108,52 @@ function AuthCard() {
     return null;
   };
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setMessage("");
-    setIsError(false);
+const handleLogin = async (e) => {
+  e.preventDefault();
+  setMessage("");
+  setIsError(false);
 
-    const emailError = validateEmailFormat(username);
-    if (emailError) {
-      setMessage(`Validation Error: ${emailError}`);
-      setIsError(true);
-      return;
+  const emailError = validateEmailFormat(username);
+  if (emailError) {
+    setMessage(`Validation Error: ${emailError}`);
+    setIsError(true);
+    return;
+  }
+
+  try {
+    const res = await api.post("/auth/login/", {
+      username,
+      password,
+    });
+    localStorage.setItem("accessToken", res.data.access);
+    localStorage.setItem("refreshToken", res.data.refresh);
+
+    if (rememberMe) {
+      localStorage.setItem("rememberMe", "true");
+      localStorage.setItem("savedUsername", username);
+    } else {
+      localStorage.removeItem("rememberMe");
+      localStorage.removeItem("savedUsername");
     }
 
-    try {
-      const res = await api.post("/auth/login/", {
-        username,
-        password,
-      });
-      localStorage.setItem("accessToken", res.data.access);
-      localStorage.setItem("refreshToken", res.data.refresh);
+    navigate("/dashboard");
+  } catch (err) {
+    console.error("Login Error details:", err);
 
-      if (rememberMe) {
-        localStorage.setItem("rememberMe", "true");
-        localStorage.setItem("savedUsername", username);
-      } else {
-        localStorage.removeItem("rememberMe");
-        localStorage.removeItem("savedUsername");
-      }
-
-      navigate("/dashboard");
-    } catch (err) {
+    if (err.code === "ERR_NETWORK") {
       setMessage(
-        err.response?.data?.error || "Login failed. Check your credentials."
+        "Server connection failed. If Render was asleep, please wait 30 seconds and try again."
       );
-      setIsError(true);
+    } else {
+      setMessage(
+        err.response?.data?.detail ||
+          err.response?.data?.error ||
+          "Login failed. Check your credentials."
+      );
     }
-  };
+    setIsError(true);
+  }
+};
 
   const handleRequestOTP = async (e) => {
     e.preventDefault();

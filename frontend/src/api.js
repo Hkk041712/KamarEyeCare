@@ -1,10 +1,12 @@
 import axios from 'axios';
 
-// Set base URL to backend root
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://kamareyecare.onrender.com';
+// Ensure this matches your backend Django URL structure.
+// If your backend routes are at /api/auth/login/, use 'https://kamareyecare.onrender.com/api'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://kamareyecare.onrender.com/api';
 
 const api = axios.create({
   baseURL: BASE_URL,
+  timeout: 60000, // 60s timeout to handle Render cold starts
   headers: {
     'Content-Type': 'application/json',
   },
@@ -102,7 +104,7 @@ function handleLogout() {
   const currentPath = window.location.pathname;
   
   if (!currentPath.endsWith('/login') && !currentPath.includes('/login')) {
-    window.location.href = `/KamarEyeCare/login?redirect=${encodeURIComponent(currentPath)}`;
+    window.location.href = `/KamarEyeCare/#/login`;
   }
 }
 
