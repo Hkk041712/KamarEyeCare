@@ -15,6 +15,7 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from decimal import Decimal, InvalidOperation
 
+
 from .models import User, Product, Sale, Patient, Expense
 from .serializers import ExpenseSerializer
 
@@ -206,62 +207,62 @@ def manage_sales(request):
         data = [
             {
                 "id": s.id,
-                "product_id": s.product.id,
-                "product_name": s.product.name,
-                "category": s.product.category,
+                "product_id": s.product.id if s.product else None,
+                "product_name": s.product.name if s.product else "Deleted Product",
                 "quantity": s.quantity,
                 "unit_price": float(s.unit_price),
-                "total": float(s.total),
-                "created_at": s.created_at.strftime("%Y-%m-%d"),
+                "total": float(s.total) if hasattr(s, 'total') else float(s.unit_price * s.quantity),
+                "created_at": s.created_at.strftime("%Y-%m-%d") if s.created_at else None,
             }
             for s in sales
         ]
         return Response(data, status=status.HTTP_200_OK)
 
     elif request.method == 'POST':
-        product_id = request.data.get('product_id') or request.data.get('product')
-        
+        product_id = request.data.get('product_id')
         try:
-            qty = int(request.data.get('quantity', 1))
-        except (ValueError, TypeError):
-            return Response({'error': 'Invalid quantity format.'}, status=status.HTTP_400_BAD_REQUEST)
+            quantity = int(request.data.get('quantity', 1))
+            unit_price = Decimal(str(request.data.get('unit_price', 0)).strip() or '0')
+        except (ValueError, TypeError, InvalidOperation):
+            return Response({'error': 'Invalid format for quantity or price.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        custom_price = request.data.get('unit_price')
-        sale_date_str = request.data.get('created_at')
+        if not product_id:
+            return Response({'error': 'Product ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            # Atomic transaction to ensure data integrity
             with transaction.atomic():
                 product = Product.objects.select_for_update().get(id=product_id)
-                
-                if product.quantity < qty:
-                    return Response({'error': f'Insufficient stock. Only {product.quantity} units remaining.'}, status=status.HTTP_400_BAD_REQUEST)
 
-                unit_price = float(custom_price) if custom_price is not None else float(product.sell_price)
-                total = unit_price * qty
+                if product.quantity < quantity:
+                    return Response(
+                        {'error': f'Insufficient stock. Only {product.quantity} items available.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
 
-                product.quantity -= qty
-                product.save()
-
-                sale = Sale(
-                    id=generate_sale_id(),
+                # Record the sale transaction
+                sale = Sale.objects.create(
                     product=product,
-                    quantity=qty,
+                    quantity=quantity,
                     unit_price=unit_price,
-                    total=total
+                    created_at=request.data.get('created_at')
                 )
 
-                if sale_date_str:
-                    try:
-                        sale.created_at = datetime.strptime(sale_date_str, "%Y-%m-%d").date()
-                    except ValueError:
-                        pass
+                # Deduct stock quantity
+                product.quantity -= quantity
 
-                sale.save()
+                # Check if stock has reached 0
+                if product.quantity <= 0:
+                    product.delete()
+                    msg = 'Sale recorded successfully! Stock reached 0 and the product was automatically removed from inventory.'
+                else:
+                    product.save()
+                    msg = f'Sale recorded! Remaining stock for {product.name}: {product.quantity}'
 
-            return Response({'message': 'Income transaction recorded successfully!', 'id': sale.id}, status=status.HTTP_201_CREATED)
-            
+                return Response({'message': msg, 'sale_id': sale.id}, status=status.HTTP_201_CREATED)
+
         except Product.DoesNotExist:
-            return Response({'error': 'Selected product does not exist.'}, status=status.HTTP_404_NOT_FOUND)    
+            return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND) 
 
 
 @api_view(['GET', 'POST', 'DELETE'])
