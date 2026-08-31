@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+// Dynamically use environment variable or default to live Render backend
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'hhttps://kamareyecare.onrender.com';
+
 const api = axios.create({
-  baseURL: 'http://127.0.0.1:8000/api',
+  baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -73,8 +76,8 @@ api.interceptors.response.use(
     }
 
     try {
-      // Attempt to get a new access token from simplejwt endpoint
-      const response = await axios.post('http://127.0.0.1:8000/api/token/refresh/', {
+      // Updated token refresh call to use the dynamic BASE_URL
+      const response = await axios.post(`${BASE_URL}/token/refresh/`, {
         refresh: refreshToken,
       });
 
