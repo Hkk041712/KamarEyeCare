@@ -26,6 +26,7 @@ from .serializers import ExpenseSerializer
 
 logger = logging.getLogger(__name__)
 
+
 class AuthRateThrottle(AnonRateThrottle):
     rate = '5/min'
 
@@ -159,27 +160,31 @@ def manage_products(request, product_id=None):
 
             return Response(data, status=status.HTTP_200_OK)
 
+        # views.py - inside manage_products (POST branch)
         elif request.method == 'POST':
             custom_id = (request.data.get('id') or '').strip()
             name = request.data.get('name')
             category = request.data.get('category', 'Frames')
 
-            if not custom_id:
-                custom_id = generate_product_id()
-
             if not name:
                 return Response({'error': 'Name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Auto-generate ID if omitted or blank
+            if not custom_id:
+                custom_id = generate_product_id()
 
             if Product.objects.filter(id=custom_id).exists():
                 return Response({'error': f'Product with ID "{custom_id}" already exists.'}, status=status.HTTP_400_BAD_REQUEST)
 
             try:
-                quantity = int(request.data.get('quantity', 0))
-                raw_buy = str(request.data.get('buy_price', 0)).strip() or '0'
-                raw_sell = str(request.data.get('sell_price', 0)).strip() or '0'
+                raw_qty = request.data.get('quantity')
+                quantity = int(raw_qty) if raw_qty is not None and str(raw_qty).strip() != "" else 0
 
-                buy_price = Decimal(raw_buy).quantize(Decimal('0.01'))
-                sell_price = Decimal(raw_sell).quantize(Decimal('0.01'))
+                raw_buy = str(request.data.get('buy_price', 0)).strip()
+                raw_sell = str(request.data.get('sell_price', 0)).strip()
+
+                buy_price = Decimal(raw_buy if raw_buy else '0').quantize(Decimal('0.01'))
+                sell_price = Decimal(raw_sell if raw_sell else '0').quantize(Decimal('0.01'))
 
                 if quantity < 0:
                     return Response({'error': 'Quantity cannot be negative.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -202,7 +207,7 @@ def manage_products(request, product_id=None):
         elif request.method == 'DELETE':
             if not product_id:
                 return Response({'error': 'Product ID is required for deletion.'}, status=status.HTTP_400_BAD_REQUEST)
-                
+
             try:
                 product = Product.objects.get(id=product_id)
                 product.delete()
@@ -221,17 +226,17 @@ def manage_sales(request):
     if request.method == 'GET':
         sales = Sale.objects.all().order_by('-created_at')
         data = [
-        {
-            "id": s.id,
-            "product_id": s.product.id if s.product else None,
-            "product_name": s.product_name or (s.product.name if s.product else "Deleted Product"),
-            "quantity": s.quantity,
-            "unit_price": f"{s.unit_price:.2f}" if s.unit_price is not None else "0.00",
-            "total": f"{s.total:.2f}" if getattr(s, 'total', None) is not None else f"{(s.unit_price * s.quantity):.2f}",
-            "created_at": s.created_at.strftime("%Y-%m-%d") if getattr(s, 'created_at', None) else None,
-        }
-        for s in sales
-    ]
+            {
+                "id": s.id,
+                "product_id": s.product.id if s.product else None,
+                "product_name": s.product_name or (s.product.name if s.product else "Deleted Product"),
+                "quantity": s.quantity,
+                "unit_price": f"{s.unit_price:.2f}" if s.unit_price is not None else "0.00",
+                "total": f"{s.total:.2f}" if getattr(s, 'total', None) is not None else f"{(s.unit_price * s.quantity):.2f}",
+                "created_at": s.created_at.strftime("%Y-%m-%d") if getattr(s, 'created_at', None) else None,
+            }
+            for s in sales
+        ]
         return Response(data, status=status.HTTP_200_OK)
 
     elif request.method == 'POST':
@@ -338,7 +343,7 @@ def manage_patients(request, patient_id=None):
 
     elif request.method == 'POST':
         full_name = (request.data.get('full_name') or request.data.get('name') or '').strip()
-        
+
         if not full_name:
             return Response({'error': 'Full name is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -364,7 +369,7 @@ def manage_patients(request, patient_id=None):
     elif request.method == 'DELETE':
         if not patient_id:
             return Response({'error': 'Patient ID is required for deletion.'}, status=status.HTTP_400_BAD_REQUEST)
-            
+
         try:
             patient = Patient.objects.get(id=patient_id)
             patient.delete()
