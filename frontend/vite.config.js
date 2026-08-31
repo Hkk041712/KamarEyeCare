@@ -1,8 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import fileURLToPath from 'node:url'
-import path from 'path'
+import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
   base: '/KamarEyeCare/',
@@ -12,7 +11,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(path.dirname(fileURLToPath(import.meta.url)), './src'),
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
 })
