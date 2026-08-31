@@ -378,23 +378,29 @@ def manage_patients(request, patient_id=None):
             return Response({'error': 'Patient not found.'}, status=status.HTTP_404_NOT_FOUND)
 
 
+# views.py
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def manage_expenses(request):
-    if request.method == 'GET':
-        expenses = Expense.objects.all().order_by('-created_at')
-        serializer = ExpenseSerializer(expenses, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+    try:
+        if request.method == 'GET':
+            expenses = Expense.objects.all().order_by('-created_at')
+            serializer = ExpenseSerializer(expenses, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
-    elif request.method == 'POST':
-        serializer = ExpenseSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(
-                {"message": "Expense recorded successfully!", "data": serializer.data},
-                status=status.HTTP_201_CREATED
-            )
-        return Response({"error": "Invalid expense details provided."}, status=status.HTTP_400_BAD_REQUEST)
+        elif request.method == 'POST':
+            serializer = ExpenseSerializer(data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(
+                    {"message": "Expense recorded successfully!", "data": serializer.data},
+                    status=status.HTTP_201_CREATED
+                )
+            return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    except Exception as e:
+        logger.error(f"manage_expenses error: {str(e)}", exc_info=True)
+        return Response({'error': f'Server error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['DELETE'])
