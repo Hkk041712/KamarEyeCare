@@ -49,6 +49,7 @@ class Product(models.Model):
 class Sale(models.Model):
     id = models.CharField(max_length=36, primary_key=True, default=generate_sale_id)
     product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True)
+    product_name = models.CharField(max_length=255, blank=True, null=True)  # <-- Added field
     quantity = models.IntegerField(validators=[MinValueValidator(1)])
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     total = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
@@ -58,8 +59,8 @@ class Sale(models.Model):
         db_table = 'sales'
 
     def __str__(self):
-        prod_name = self.product.name if self.product else "Deleted Product"
-        return f"{self.id} - {prod_name}"
+        name = self.product_name or (self.product.name if self.product else "Unknown Product")
+        return f"{self.id} - {name}"
 
 
 class Patient(models.Model):

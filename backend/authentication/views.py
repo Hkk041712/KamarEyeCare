@@ -221,17 +221,17 @@ def manage_sales(request):
     if request.method == 'GET':
         sales = Sale.objects.all().order_by('-created_at')
         data = [
-            {
-                "id": s.id,
-                "product_id": s.product.id if s.product else None,
-                "product_name": s.product.name if s.product else "Deleted Product",
-                "quantity": s.quantity,
-                "unit_price": f"{s.unit_price:.2f}" if s.unit_price is not None else "0.00",
-                "total": f"{s.total:.2f}" if getattr(s, 'total', None) is not None else f"{(s.unit_price * s.quantity):.2f}",
-                "created_at": s.created_at.strftime("%Y-%m-%d") if getattr(s, 'created_at', None) else None,
-            }
-            for s in sales
-        ]
+        {
+            "id": s.id,
+            "product_id": s.product.id if s.product else None,
+            "product_name": s.product_name or (s.product.name if s.product else "Deleted Product"),
+            "quantity": s.quantity,
+            "unit_price": f"{s.unit_price:.2f}" if s.unit_price is not None else "0.00",
+            "total": f"{s.total:.2f}" if getattr(s, 'total', None) is not None else f"{(s.unit_price * s.quantity):.2f}",
+            "created_at": s.created_at.strftime("%Y-%m-%d") if getattr(s, 'created_at', None) else None,
+        }
+        for s in sales
+    ]
         return Response(data, status=status.HTTP_200_OK)
 
     elif request.method == 'POST':
