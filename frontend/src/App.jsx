@@ -1,55 +1,11 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "./api";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import bgImage from "./assets/eyecare-bg.jpg";
 import ManageProducts from "./ManageProducts";
 import ManagePatients from "./ManagePatients";
 import ManageExpenses from "./ManageExpenses";
 import "./App.css";
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/auth";
-
-// Axios request interceptor: attach Bearer JWT
-axios.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("accessToken");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// Axios response interceptor: silent JWT refresh on 401
-axios.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      const refreshToken = localStorage.getItem("refreshToken");
-      if (refreshToken) {
-        try {
-          const res = await axios.post(`${API_BASE_URL}/token/refresh/`, {
-            refresh: refreshToken,
-          });
-          const newAccessToken = res.data.access;
-          localStorage.setItem("accessToken", newAccessToken);
-          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-          return axios(originalRequest);
-        } catch (refreshErr) {
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("refreshToken");
-          window.location.reload();
-          return Promise.reject(refreshErr);
-        }
-      }
-    }
-    return Promise.reject(error);
-  }
-);
 
 // Protected Route Guard Component
 function ProtectedRoute({ children }) {
@@ -165,7 +121,7 @@ function AuthCard() {
     }
 
     try {
-      const res = await axios.post(`${API_BASE_URL}/login/`, {
+      const res = await api.post("/auth/login/", {
         username,
         password,
       });
@@ -202,7 +158,7 @@ function AuthCard() {
     }
 
     try {
-      const res = await axios.post(`${API_BASE_URL}/request-reset-otp/`, {
+      const res = await api.post("/auth/request-reset-otp/", {
         username: resetEmail,
       });
       setMessage(res.data.message);
@@ -225,7 +181,7 @@ function AuthCard() {
     }
 
     try {
-      await axios.post(`${API_BASE_URL}/confirm-reset/`, {
+      await api.post("/auth/confirm-reset/", {
         username: resetEmail,
         otp: otpCode,
         new_password: newPassword,
