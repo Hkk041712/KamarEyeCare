@@ -1,6 +1,6 @@
 import random
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
+from decimal import Decimal, InvalidOperation
 
 from .models import User, Product, Sale, Patient, Expense
 from .serializers import ExpenseSerializer
@@ -141,9 +142,9 @@ def manage_products(request, product_id=None):
                 "name": p.name,
                 "category": p.category,
                 "quantity": p.quantity,
-                "buy_price": float(p.buy_price),
-                "sell_price": float(p.sell_price),
-                "created_at": p.created_at.strftime("%Y-%m-%d"),
+                "buy_price": float(p.buy_price) if p.buy_price is not None else 0.0,
+                "sell_price": float(p.sell_price) if p.sell_price is not None else 0.0,
+                "created_at": p.created_at.strftime("%Y-%m-%d") if hasattr(p, 'created_at') and p.created_at else None,
             }
             for p in products
         ]
@@ -151,17 +152,22 @@ def manage_products(request, product_id=None):
 
     elif request.method == 'POST':
         name = request.data.get('name')
-        category = request.data.get('category')
+        category = request.data.get('category', 'Frames')
 
-        if not name or not category:
-            return Response({'error': 'Name and Category are required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not name:
+            return Response({'error': 'Name is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Parse and sanitize numerical inputs strictly
         try:
             quantity = int(request.data.get('quantity', 0))
-            buy_price = float(request.data.get('buy_price', 0.0))
-            sell_price = float(request.data.get('sell_price', 0.0))
-        except (ValueError, TypeError):
-            return Response({'error': 'Invalid numeric value for price or quantity.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            raw_buy = str(request.data.get('buy_price', 0)).strip() or '0'
+            raw_sell = str(request.data.get('sell_price', 0)).strip() or '0'
+
+            buy_price = Decimal(raw_buy).quantize(Decimal('0.01'))
+            sell_price = Decimal(raw_sell).quantize(Decimal('0.01'))
+        except (ValueError, TypeError, InvalidOperation):
+            return Response({'error': 'Invalid format for price or quantity.'}, status=status.HTTP_400_BAD_REQUEST)
 
         product = Product.objects.create(
             id=generate_product_id(),
@@ -183,8 +189,6 @@ def manage_products(request, product_id=None):
             return Response({'message': f'Product {product_id} deleted successfully.'}, status=status.HTTP_200_OK)
         except Product.DoesNotExist:
             return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def manage_sales(request):
@@ -206,10 +210,15 @@ def manage_sales(request):
         return Response(data, status=status.HTTP_200_OK)
 
     elif request.method == 'POST':
-        product_id = request.data.get('product_id')
-        qty = int(request.data.get('quantity', 1))
+        product_id = request.data.get('product_id') or request.data.get('product')
+        
+        try:
+            qty = int(request.data.get('quantity', 1))
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid quantity format.'}, status=status.HTTP_400_BAD_REQUEST)
+
         custom_price = request.data.get('unit_price')
-        sale_date = request.data.get('created_at')
+        sale_date_str = request.data.get('created_at')
 
         try:
             with transaction.atomic():
@@ -224,7 +233,7 @@ def manage_sales(request):
                 product.quantity -= qty
                 product.save()
 
-                sale = Sale.objects.create(
+                sale = Sale(
                     id=generate_sale_id(),
                     product=product,
                     quantity=qty,
@@ -232,14 +241,18 @@ def manage_sales(request):
                     total=total
                 )
 
-                if sale_date:
-                    sale.created_at = sale_date
-                    sale.save()
+                if sale_date_str:
+                    try:
+                        sale.created_at = datetime.strptime(sale_date_str, "%Y-%m-%d").date()
+                    except ValueError:
+                        pass
+
+                sale.save()
 
             return Response({'message': 'Income transaction recorded successfully!', 'id': sale.id}, status=status.HTTP_201_CREATED)
             
         except Product.DoesNotExist:
-            return Response({'error': 'Selected product does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Selected product does not exist.'}, status=status.HTTP_404_NOT_FOUND)    
 
 
 @api_view(['GET', 'POST', 'DELETE'])
@@ -266,7 +279,7 @@ def manage_patients(request, patient_id=None):
                 "power_left_cylinder": p.power_left_cylinder or "0.00",
                 "power_left_addition": p.power_left_addition or "0.00",
                 "power_notes": p.power_notes or "",
-                "created_at": p.created_at.strftime("%Y-%m-%d") if p.created_at else "",
+                "created_at": p.created_at.strftime("%Y-%m-%d") if p.created_at and hasattr(p.created_at, 'strftime') else "",
             }
             for p in patients
         ]

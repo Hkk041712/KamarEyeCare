@@ -5,14 +5,24 @@ import "./ManagePatients.css";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api/auth";
 
-export default function ManagePatients({ onBack }) {
-  const [activeTab, setActiveTab] = useState("view"); // 'view', 'add', 'history'
+const getAuthHeaders = () => {
+  const token =
+    localStorage.getItem("token") || localStorage.getItem("authToken");
+  return {
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    withCredentials: true,
+  };
+};
 
-  // DB Options for Frames and Lenses
+export default function ManagePatients({ onBack }) {
+  const [activeTab, setActiveTab] = useState("view");
+
   const [frames, setFrames] = useState([]);
   const [lenses, setLenses] = useState([]);
 
-  // Patient Registration & Power Form State
   const [patientForm, setPatientForm] = useState({
     first_name: "",
     middle_name: "",
@@ -22,7 +32,6 @@ export default function ManagePatients({ onBack }) {
     lens_chosen: "",
     others_chosen: "",
     notes: "",
-    // Power fields
     power_right_sphere: "",
     power_right_cylinder: "",
     power_right_addition: "",
@@ -32,25 +41,25 @@ export default function ManagePatients({ onBack }) {
     power_notes: "",
   });
 
-  // Data & State Handlers
   const [patients, setPatients] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ text: "", isError: false });
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Table Sorting State
   const [sortConfig, setSortConfig] = useState({
     key: "id",
     direction: "desc",
   });
 
-  // Fetch Patients & Power Records from DB
   const fetchPatients = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${API_BASE_URL}/patients/`);
-      setPatients(response.data || []);
+      const response = await axios.get(
+        `${API_BASE_URL}/patients/`,
+        getAuthHeaders()
+      );
+      setPatients(response.data?.results || response.data || []);
     } catch (err) {
       console.error("Failed to fetch patients:", err);
     } finally {
@@ -58,19 +67,18 @@ export default function ManagePatients({ onBack }) {
     }
   }, []);
 
-
-  // Fetch Inventory Products (Frames & Lenses) from DB
   const fetchProducts = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/products/`);
-      const allProducts = res.data || [];
+      const res = await axios.get(
+        `${API_BASE_URL}/products/`,
+        getAuthHeaders()
+      );
+      const allProducts = res.data?.results || res.data || [];
 
-      // Filter frames (only category === 'frames')
       const filteredFrames = allProducts.filter(
         (p) => p.category && p.category.toLowerCase() === "frames"
       );
 
-      // Filter lenses (category === 'lenses' OR category === 'contact lenses')
       const filteredLenses = allProducts.filter((p) => {
         if (!p.category) return false;
         const cat = p.category.toLowerCase();
@@ -98,13 +106,11 @@ export default function ManagePatients({ onBack }) {
     };
   }, [fetchPatients, fetchProducts]);
 
-  // Form Field Change Handler
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setPatientForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Helper: Helper to generate Patient ID: First Name + Last 2 phone digits + 2 random digits
   const generatePatientId = (firstName, phone) => {
     const cleanName =
       firstName
@@ -135,50 +141,43 @@ export default function ManagePatients({ onBack }) {
 
     const generatedId = generatePatientId(patientForm.first_name, cleanPhone);
 
-    // Build payload matching Django model fields exactly
     const payload = {
-      // Patient Info
       name: fullName,
       full_name: fullName,
       patient_id: generatedId,
       phone: formattedPhone,
-
-      // Frames & Lenses (Sent as both single names and 'chosen' variants)
       frame: patientForm.frame_chosen,
       frame_chosen: patientForm.frame_chosen,
       lens: patientForm.lens_chosen,
       lens_chosen: patientForm.lens_chosen,
       others_chosen: patientForm.others_chosen,
       notes: patientForm.notes,
-
-      // Optical Power - Right Eye (OD)
       od_sph: patientForm.power_right_sphere,
       od_cyl: patientForm.power_right_cylinder,
       od_add: patientForm.power_right_addition,
       power_right_sphere: patientForm.power_right_sphere,
       power_right_cylinder: patientForm.power_right_cylinder,
       power_right_addition: patientForm.power_right_addition,
-
-      // Optical Power - Left Eye (OS)
       os_sph: patientForm.power_left_sphere,
       os_cyl: patientForm.power_left_cylinder,
       os_add: patientForm.power_left_addition,
       power_left_sphere: patientForm.power_left_sphere,
       power_left_cylinder: patientForm.power_left_cylinder,
       power_left_addition: patientForm.power_left_addition,
-
-      // Power Notes
       power_notes: patientForm.power_notes,
     };
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/patients/`, payload);
+      const response = await axios.post(
+        `${API_BASE_URL}/patients/`,
+        payload,
+        getAuthHeaders()
+      );
       setStatusMsg({
-        text: response.data.message || "Patient recorded successfully!",
+        text: response.data?.message || "Patient recorded successfully!",
         isError: false,
       });
 
-      // Reset Form
       setPatientForm({
         first_name: "",
         middle_name: "",
@@ -201,13 +200,15 @@ export default function ManagePatients({ onBack }) {
       setTimeout(() => setActiveTab("view"), 1200);
     } catch (err) {
       setStatusMsg({
-        text: err.response?.data?.error || "Failed to add patient record.",
+        text:
+          err.response?.data?.detail ||
+          err.response?.data?.error ||
+          "Failed to add patient record.",
         isError: true,
       });
     }
   };
 
-  // Delete Patient Record
   const handleDeletePatient = async (patientId) => {
     if (
       !window.confirm(`Are you sure you want to delete patient #${patientId}?`)
@@ -215,7 +216,10 @@ export default function ManagePatients({ onBack }) {
       return;
 
     try {
-      await axios.delete(`${API_BASE_URL}/patients/${patientId}/`);
+      await axios.delete(
+        `${API_BASE_URL}/patients/${patientId}/`,
+        getAuthHeaders()
+      );
       setStatusMsg({
         text: "Patient record deleted successfully!",
         isError: false,
@@ -223,17 +227,19 @@ export default function ManagePatients({ onBack }) {
       if (selectedPatient?.id === patientId) setSelectedPatient(null);
       fetchPatients();
     } catch (err) {
-      alert(err.response?.data?.error || "Failed to delete patient record.");
+      alert(
+        err.response?.data?.detail ||
+          err.response?.data?.error ||
+          "Failed to delete patient record."
+      );
     }
   };
 
-  // View Detailed Patient Prescription History
   const handleViewHistory = (patient) => {
     setSelectedPatient(patient);
     setActiveTab("history");
   };
 
-  // Sorting Handler
   const requestSort = (key) => {
     let direction = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") {
@@ -242,7 +248,6 @@ export default function ManagePatients({ onBack }) {
     setSortConfig({ key, direction });
   };
 
-  // Helper for Full Name Concatenation
   const getFullName = (p) => {
     if (p.full_name) return p.full_name;
     if (p.name) return p.name;
@@ -252,7 +257,6 @@ export default function ManagePatients({ onBack }) {
     return combined || "N/A";
   };
 
-  // Search & Filter Patients safely
   const processedPatients = [...patients]
     .filter((p) => {
       const fullName = getFullName(p).toLowerCase();
@@ -307,7 +311,6 @@ export default function ManagePatients({ onBack }) {
       }}
     >
       <div className="patients-container">
-        {/* Header Section */}
         <div className="patients-header">
           <div className="header-title-group">
             <svg
@@ -331,7 +334,6 @@ export default function ManagePatients({ onBack }) {
           )}
         </div>
 
-        {/* Top Navigation Tabs */}
         <div className="nav-tabs">
           <button
             className={`tab-btn ${activeTab === "view" ? "active" : ""}`}
@@ -357,7 +359,6 @@ export default function ManagePatients({ onBack }) {
           )}
         </div>
 
-        {/* TAB 1: VIEW PATIENTS DIRECTORY */}
         {activeTab === "view" && (
           <div className="tab-card">
             <div className="card-header-row">
@@ -465,7 +466,6 @@ export default function ManagePatients({ onBack }) {
           </div>
         )}
 
-        {/* TAB 2: REGISTER NEW PATIENT & POWER */}
         {activeTab === "add" && (
           <div className="tab-card">
             <h2 className="card-heading">
@@ -484,7 +484,6 @@ export default function ManagePatients({ onBack }) {
             )}
 
             <form onSubmit={handleAddPatient} className="patients-form">
-              {/* Personal Details - Divided Name Fields */}
               <div className="section-divider">General Information</div>
               <div className="form-grid">
                 <div className="input-group">
@@ -554,7 +553,6 @@ export default function ManagePatients({ onBack }) {
                   </div>
                 </div>
 
-                {/* DB Dynamic Select Dropdown: Frames */}
                 <div className="input-group">
                   <label className="input-label">Frame Chosen</label>
                   <select
@@ -578,7 +576,6 @@ export default function ManagePatients({ onBack }) {
                   </select>
                 </div>
 
-                {/* DB Dynamic Select Dropdown: Lenses */}
                 <div className="input-group">
                   <label className="input-label">Lens Chosen</label>
                   <select
@@ -631,12 +628,10 @@ export default function ManagePatients({ onBack }) {
                 </div>
               </div>
 
-              {/* Optical Power Prescription Details */}
               <div className="section-divider">
                 Optical Power Parameters (Patients Power)
               </div>
 
-              {/* Right Eye (OD) */}
               <h3 className="eye-heading right-eye">
                 Right Eye (Oculus Dexter - OD)
               </h3>
@@ -679,7 +674,6 @@ export default function ManagePatients({ onBack }) {
                 </div>
               </div>
 
-              {/* Left Eye (OS) */}
               <h3 className="eye-heading left-eye">
                 Left Eye (Oculus Sinister - OS)
               </h3>
@@ -743,7 +737,6 @@ export default function ManagePatients({ onBack }) {
           </div>
         )}
 
-        {/* TAB 3: PATIENT HISTORY & POWER DETAILS */}
         {activeTab === "history" && selectedPatient && (
           <div className="tab-card">
             <div className="card-header-row">
@@ -762,7 +755,6 @@ export default function ManagePatients({ onBack }) {
             </div>
 
             <div className="history-details-grid">
-              {/* Personal & Choices Summary */}
               <div className="history-box">
                 <h4 className="box-title">Patient Profile</h4>
                 <div className="info-row">
@@ -786,13 +778,13 @@ export default function ManagePatients({ onBack }) {
                 <div className="info-row">
                   <span className="info-label">Frame Selected:</span>
                   <span className="info-val highlight">
-                    {selectedPatient.frame_chosen}
+                    {selectedPatient.frame_chosen || selectedPatient.frame}
                   </span>
                 </div>
                 <div className="info-row">
                   <span className="info-label">Lens Selected:</span>
                   <span className="info-val highlight">
-                    {selectedPatient.lens_chosen}
+                    {selectedPatient.lens_chosen || selectedPatient.lens}
                   </span>
                 </div>
                 {selectedPatient.others_chosen && (
@@ -811,7 +803,6 @@ export default function ManagePatients({ onBack }) {
                 )}
               </div>
 
-              {/* Optical Power Table */}
               <div className="history-box">
                 <h4 className="box-title">
                   Optical Power Matrix (PATIENTS_POWER)
@@ -829,19 +820,39 @@ export default function ManagePatients({ onBack }) {
                     <tbody>
                       <tr>
                         <td className="eye-badge right">Right Eye (OD)</td>
-                        <td>{selectedPatient.power_right_sphere || "0.00"}</td>
                         <td>
-                          {selectedPatient.power_right_cylinder || "0.00"}
+                          {selectedPatient.power_right_sphere ||
+                            selectedPatient.od_sph ||
+                            "0.00"}
                         </td>
                         <td>
-                          {selectedPatient.power_right_addition || "0.00"}
+                          {selectedPatient.power_right_cylinder ||
+                            selectedPatient.od_cyl ||
+                            "0.00"}
+                        </td>
+                        <td>
+                          {selectedPatient.power_right_addition ||
+                            selectedPatient.od_add ||
+                            "0.00"}
                         </td>
                       </tr>
                       <tr>
                         <td className="eye-badge left">Left Eye (OS)</td>
-                        <td>{selectedPatient.power_left_sphere || "0.00"}</td>
-                        <td>{selectedPatient.power_left_cylinder || "0.00"}</td>
-                        <td>{selectedPatient.power_left_addition || "0.00"}</td>
+                        <td>
+                          {selectedPatient.power_left_sphere ||
+                            selectedPatient.os_sph ||
+                            "0.00"}
+                        </td>
+                        <td>
+                          {selectedPatient.power_left_cylinder ||
+                            selectedPatient.os_cyl ||
+                            "0.00"}
+                        </td>
+                        <td>
+                          {selectedPatient.power_left_addition ||
+                            selectedPatient.os_add ||
+                            "0.00"}
+                        </td>
                       </tr>
                     </tbody>
                   </table>
