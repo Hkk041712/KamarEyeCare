@@ -495,7 +495,7 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.first_name}
                     onChange={handleInputChange}
                     placeholder="e.g. Hassan"
-                    required
+                    
                   />
                 </div>
 
@@ -520,7 +520,7 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.last_name}
                     onChange={handleInputChange}
                     placeholder="e.g. Kamar"
-                    required
+                    
                   />
                 </div>
 
@@ -548,7 +548,7 @@ export default function ManagePatients({ onBack }) {
                       value={patientForm.phone}
                       onChange={handleInputChange}
                       placeholder="e.g. 70 123 456"
-                      required
+                      
                     />
                   </div>
                 </div>
@@ -560,7 +560,7 @@ export default function ManagePatients({ onBack }) {
                     className="patients-input"
                     value={patientForm.frame_chosen}
                     onChange={handleInputChange}
-                    required
+                    
                   >
                     <option value=""> Select Frame </option>
                     {frames.map((frame) => {
@@ -583,7 +583,7 @@ export default function ManagePatients({ onBack }) {
                     className="patients-input"
                     value={patientForm.lens_chosen}
                     onChange={handleInputChange}
-                    required
+                    
                   >
                     <option value="">Select Lens</option>
                     {lenses.map((lens) => {
@@ -601,7 +601,7 @@ export default function ManagePatients({ onBack }) {
 
                 <div className="input-group">
                   <label className="input-label">
-                    Others Chosen (Optional)
+                    Others Chosen 
                   </label>
                   <input
                     type="text"
@@ -615,7 +615,7 @@ export default function ManagePatients({ onBack }) {
 
                 <div className="input-group">
                   <label className="input-label">
-                    General Notes (Optional)
+                    General Notes 
                   </label>
                   <input
                     type="text"
@@ -645,7 +645,7 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.power_right_sphere}
                     onChange={handleInputChange}
                     placeholder="-2.00 / +1.50"
-                    required
+                    
                   />
                 </div>
                 <div className="input-group">
@@ -657,7 +657,7 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.power_right_cylinder}
                     onChange={handleInputChange}
                     placeholder="-0.50"
-                    required
+                    
                   />
                 </div>
                 <div className="input-group">
@@ -669,7 +669,7 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.power_right_addition}
                     onChange={handleInputChange}
                     placeholder="+2.00"
-                    required
+                    
                   />
                 </div>
               </div>
@@ -687,7 +687,7 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.power_left_sphere}
                     onChange={handleInputChange}
                     placeholder="-1.75 / +1.25"
-                    required
+                    
                   />
                 </div>
                 <div className="input-group">
@@ -699,7 +699,7 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.power_left_cylinder}
                     onChange={handleInputChange}
                     placeholder="-0.75"
-                    required
+                    
                   />
                 </div>
                 <div className="input-group">
@@ -711,14 +711,14 @@ export default function ManagePatients({ onBack }) {
                     value={patientForm.power_left_addition}
                     onChange={handleInputChange}
                     placeholder="+2.00"
-                    required
+                    
                   />
                 </div>
               </div>
 
               <div className="input-group" style={{ marginTop: "1rem" }}>
                 <label className="input-label">
-                  Prescription Notes (Optional)
+                  Prescription Notes 
                 </label>
                 <input
                   type="text"

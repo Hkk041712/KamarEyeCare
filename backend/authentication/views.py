@@ -323,12 +323,12 @@ def manage_patients(request, patient_id=None):
                 "lens_chosen": p.lens_chosen or "",
                 "others_chosen": p.others_chosen or "",
                 "notes": p.notes or "",
-                "power_right_sphere": p.power_right_sphere or "0.00",
-                "power_right_cylinder": p.power_right_cylinder or "0.00",
-                "power_right_addition": p.power_right_addition or "0.00",
-                "power_left_sphere": p.power_left_sphere or "0.00",
-                "power_left_cylinder": p.power_left_cylinder or "0.00",
-                "power_left_addition": p.power_left_addition or "0.00",
+                "power_right_sphere": p.power_right_sphere or "",
+                "power_right_cylinder": p.power_right_cylinder or "",
+                "power_right_addition": p.power_right_addition or "",
+                "power_left_sphere": p.power_left_sphere or "",
+                "power_left_cylinder": p.power_left_cylinder or "",
+                "power_left_addition": p.power_left_addition or "",
                 "power_notes": p.power_notes or "",
                 "created_at": p.created_at.strftime("%Y-%m-%d") if p.created_at and hasattr(p.created_at, 'strftime') else "",
             }
@@ -347,30 +347,19 @@ def manage_patients(request, patient_id=None):
             full_name=full_name,
             phone=request.data.get('phone', '').strip(),
             email=request.data.get('email', '').strip(),
-            frame_chosen=request.data.get('frame_chosen', ''),
-            lens_chosen=request.data.get('lens_chosen', ''),
-            others_chosen=request.data.get('others_chosen', ''),
-            notes=request.data.get('notes', ''),
-            power_right_sphere=request.data.get('power_right_sphere', ''),
-            power_right_cylinder=request.data.get('power_right_cylinder', ''),
-            power_right_addition=request.data.get('power_right_addition', ''),
-            power_left_sphere=request.data.get('power_left_sphere', ''),
-            power_left_cylinder=request.data.get('power_left_cylinder', ''),
-            power_left_addition=request.data.get('power_left_addition', ''),
-            power_notes=request.data.get('power_notes', '')
+            frame_chosen=request.data.get('frame_chosen', '').strip() or None,
+            lens_chosen=request.data.get('lens_chosen', '').strip() or None,
+            others_chosen=request.data.get('others_chosen', '').strip() or None,
+            notes=request.data.get('notes', '').strip() or None,
+            power_right_sphere=request.data.get('power_right_sphere', '').strip() or None,
+            power_right_cylinder=request.data.get('power_right_cylinder', '').strip() or None,
+            power_right_addition=request.data.get('power_right_addition', '').strip() or None,
+            power_left_sphere=request.data.get('power_left_sphere', '').strip() or None,
+            power_left_cylinder=request.data.get('power_left_cylinder', '').strip() or None,
+            power_left_addition=request.data.get('power_left_addition', '').strip() or None,
+            power_notes=request.data.get('power_notes', '').strip() or None
         )
         return Response({'message': 'Patient recorded successfully!', 'id': patient.id}, status=status.HTTP_201_CREATED)
-
-    elif request.method == 'DELETE':
-        if not patient_id:
-            return Response({'error': 'Patient ID is required for deletion.'}, status=status.HTTP_400_BAD_REQUEST)
-            
-        try:
-            patient = Patient.objects.get(id=patient_id)
-            patient.delete()
-            return Response({'message': f'Patient {patient_id} deleted successfully.'}, status=status.HTTP_200_OK)
-        except Patient.DoesNotExist:
-            return Response({'error': 'Patient not found.'}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['GET', 'POST'])
