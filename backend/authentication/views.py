@@ -282,6 +282,7 @@ def manage_sales(request):
                 sale = Sale.objects.create(
                     id=generate_sale_id(),
                     product=product_to_update,
+                    product_name=product_to_update.name,
                     quantity=quantity,
                     unit_price=unit_price,
                     total=total_amount,
@@ -292,7 +293,7 @@ def manage_sales(request):
 
                 if product_to_update.quantity == 0:
                     prod_name = product_to_update.name
-                    product_to_update.delete()  # Deletes product from DB; ForeignKey in Sale becomes NULL
+                    product_to_update.delete()  # Deletes product from DB; ForeignKey becomes NULL, product_name remains
                     msg = f'Sale recorded! Stock for {prod_name} reached 0 and item was removed from inventory.'
                 else:
                     product_to_update.save()
