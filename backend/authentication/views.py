@@ -1,22 +1,27 @@
+import uuid
 import random
 import logging
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
+
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
 from django.db import transaction
-from django.db.models import F
 from django.contrib.auth.hashers import check_password, make_password
+from django.core.paginator import Paginator
+
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
-from decimal import Decimal, InvalidOperation
 
-
-from .models import User, Product, Sale, Patient, Expense
+from .models import (
+    User, Product, Sale, Patient, Expense,
+    generate_product_id, generate_sale_id, generate_patient_id
+)
 from .serializers import ExpenseSerializer
 
 logger = logging.getLogger(__name__)
@@ -98,38 +103,23 @@ def confirm_password_reset(request):
         return Response({'error': 'All fields (email, OTP, new password) are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
     user = User.objects.filter(username=username).first()
-    if not user or not user.reset_otp or not check_password(otp, user.reset_otp):
+    if not user or not user.reset_otp:
         return Response({'error': 'Invalid OTP code or email.'}, status=status.HTTP_400_BAD_REQUEST)
 
     if user.reset_otp_created_at and (timezone.now() - user.reset_otp_created_at > timedelta(minutes=10)):
+        user.reset_otp = None
+        user.save()
         return Response({'error': 'OTP code has expired. Please request a new one.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not check_password(otp, user.reset_otp):
+        return Response({'error': 'Invalid OTP code or email.'}, status=status.HTTP_400_BAD_REQUEST)
 
     user.password_hash = make_password(new_password)
     user.reset_otp = None
+    user.reset_otp_created_at = None
     user.save()
 
     return Response({'message': 'Password updated successfully.'}, status=status.HTTP_200_OK)
-
-
-def generate_product_id():
-    while True:
-        prod_id = f"PRD{random.randint(1000, 9999)}"
-        if not Product.objects.filter(id=prod_id).exists():
-            return prod_id
-
-
-def generate_sale_id():
-    while True:
-        sale_id = f"SLS{random.randint(1000, 9999)}"
-        if not Sale.objects.filter(id=sale_id).exists():
-            return sale_id
-
-
-def generate_patient_id():
-    while True:
-        patient_id = f"PAT{random.randint(1000, 9999)}"
-        if not Patient.objects.filter(id=patient_id).exists():
-            return patient_id
 
 
 @api_view(['GET', 'POST', 'DELETE'])
@@ -140,7 +130,6 @@ def manage_products(request, product_id=None):
             products = Product.objects.all().order_by('-created_at')
             data = []
             for p in products:
-                # Safe date formatting
                 created_str = None
                 if getattr(p, 'created_at', None):
                     try:
@@ -153,10 +142,21 @@ def manage_products(request, product_id=None):
                     "name": p.name,
                     "category": p.category,
                     "quantity": p.quantity,
-                    "buy_price": float(p.buy_price) if p.buy_price is not None else 0.0,
-                    "sell_price": float(p.sell_price) if p.sell_price is not None else 0.0,
+                    "buy_price": f"{p.buy_price:.2f}" if p.buy_price is not None else "0.00",
+                    "sell_price": f"{p.sell_price:.2f}" if p.sell_price is not None else "0.00",
                     "created_at": created_str,
                 })
+
+            page = request.query_params.get('page')
+            if page:
+                paginator = Paginator(data, 20)
+                paginated_data = paginator.get_page(page)
+                return Response({
+                    "count": paginator.count,
+                    "total_pages": paginator.num_pages,
+                    "results": list(paginated_data)
+                }, status=status.HTTP_200_OK)
+
             return Response(data, status=status.HTTP_200_OK)
 
         elif request.method == 'POST':
@@ -165,7 +165,7 @@ def manage_products(request, product_id=None):
             category = request.data.get('category', 'Frames')
 
             if not custom_id:
-                return Response({'error': 'Product ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
+                custom_id = generate_product_id()
 
             if not name:
                 return Response({'error': 'Name is required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -180,6 +180,12 @@ def manage_products(request, product_id=None):
 
                 buy_price = Decimal(raw_buy).quantize(Decimal('0.01'))
                 sell_price = Decimal(raw_sell).quantize(Decimal('0.01'))
+
+                if quantity < 0:
+                    return Response({'error': 'Quantity cannot be negative.'}, status=status.HTTP_400_BAD_REQUEST)
+                if buy_price < Decimal('0.00') or sell_price < Decimal('0.00'):
+                    return Response({'error': 'Prices cannot be negative.'}, status=status.HTTP_400_BAD_REQUEST)
+
             except (ValueError, TypeError, InvalidOperation):
                 return Response({'error': 'Invalid format for price or quantity.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -207,7 +213,8 @@ def manage_products(request, product_id=None):
     except Exception as e:
         logger.error(f"manage_products internal error: {str(e)}", exc_info=True)
         return Response({'error': f'Server error processing products: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
+
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def manage_sales(request):
@@ -219,8 +226,8 @@ def manage_sales(request):
                 "product_id": s.product.id if s.product else None,
                 "product_name": s.product.name if s.product else "Deleted Product",
                 "quantity": s.quantity,
-                "unit_price": float(s.unit_price),
-                "total": float(s.total) if hasattr(s, 'total') and s.total is not None else float(s.unit_price * s.quantity),
+                "unit_price": f"{s.unit_price:.2f}" if s.unit_price is not None else "0.00",
+                "total": f"{s.total:.2f}" if getattr(s, 'total', None) is not None else f"{(s.unit_price * s.quantity):.2f}",
                 "created_at": s.created_at.strftime("%Y-%m-%d") if getattr(s, 'created_at', None) else None,
             }
             for s in sales
@@ -229,50 +236,68 @@ def manage_sales(request):
 
     elif request.method == 'POST':
         product_id = request.data.get('product_id')
-        try:
-            quantity = int(request.data.get('quantity', 1))
-            unit_price = Decimal(str(request.data.get('unit_price', 0)).strip() or '0')
-        except (ValueError, TypeError, InvalidOperation):
-            return Response({'error': 'Invalid format for quantity or price.'}, status=status.HTTP_400_BAD_REQUEST)
+        raw_date = request.data.get('created_at')
 
         if not product_id:
             return Response({'error': 'Product ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            with transaction.atomic():
-                product = Product.objects.select_for_update().get(id=product_id)
+            quantity = int(request.data.get('quantity', 1))
+            unit_price = Decimal(str(request.data.get('unit_price', 0)).strip() or '0')
+            if quantity <= 0 or unit_price < Decimal('0.00'):
+                return Response({'error': 'Quantity must be positive and price cannot be negative.'}, status=status.HTTP_400_BAD_REQUEST)
+        except (ValueError, TypeError, InvalidOperation):
+            return Response({'error': 'Invalid format for quantity or price.'}, status=status.HTTP_400_BAD_REQUEST)
 
-                if product.quantity < quantity:
+        sale_date = timezone.now().date()
+        if raw_date:
+            try:
+                sale_date = datetime.strptime(str(raw_date).strip(), "%Y-%m-%d").date()
+            except ValueError:
+                return Response({'error': 'Invalid date format. Expected YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if product.quantity < quantity:
+            return Response(
+                {'error': f'Insufficient stock. Only {product.quantity} items available.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            with transaction.atomic():
+                product_to_update = Product.objects.select_for_update().get(id=product_id)
+
+                if product_to_update.quantity < quantity:
                     return Response(
-                        {'error': f'Insufficient stock. Only {product.quantity} items available.'},
+                        {'error': f'Insufficient stock. Only {product_to_update.quantity} items available.'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
-                # Calculate total price
                 total_amount = (unit_price * quantity).quantize(Decimal('0.01'))
 
-                # Generate Sale ID & Create Record
                 sale = Sale.objects.create(
                     id=generate_sale_id(),
-                    product=product,
+                    product=product_to_update,
                     quantity=quantity,
                     unit_price=unit_price,
-                    total=total_amount
+                    total=total_amount,
+                    created_at=sale_date
                 )
 
-                # Deduct stock safely without breaking foreign key integrity
-                product.quantity -= quantity
-                product.save()
+                product_to_update.quantity -= quantity
+                product_to_update.save()
 
-                if product.quantity == 0:
-                    msg = f'Sale recorded! Stock for {product.name} has reached 0.'
+                if product_to_update.quantity == 0:
+                    msg = f'Sale recorded! Stock for {product_to_update.name} has reached 0.'
                 else:
-                    msg = f'Sale recorded! Remaining stock for {product.name}: {product.quantity}'
+                    msg = f'Sale recorded! Remaining stock for {product_to_update.name}: {product_to_update.quantity}'
 
                 return Response({'message': msg, 'sale_id': sale.id}, status=status.HTTP_201_CREATED)
 
-        except Product.DoesNotExist:
-            return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             logger.error(f"Sale processing error: {str(e)}", exc_info=True)
             return Response({'error': f'Failed to process sale: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
