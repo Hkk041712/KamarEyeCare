@@ -289,11 +289,13 @@ def manage_sales(request):
                 )
 
                 product_to_update.quantity -= quantity
-                product_to_update.save()
 
                 if product_to_update.quantity == 0:
-                    msg = f'Sale recorded! Stock for {product_to_update.name} has reached 0.'
+                    prod_name = product_to_update.name
+                    product_to_update.delete()  # Deletes product from DB; ForeignKey in Sale becomes NULL
+                    msg = f'Sale recorded! Stock for {prod_name} reached 0 and item was removed from inventory.'
                 else:
+                    product_to_update.save()
                     msg = f'Sale recorded! Remaining stock for {product_to_update.name}: {product_to_update.quantity}'
 
                 return Response({'message': msg, 'sale_id': sale.id}, status=status.HTTP_201_CREATED)
