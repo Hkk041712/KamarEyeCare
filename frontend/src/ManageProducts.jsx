@@ -43,40 +43,40 @@ export default function ManageProducts({ onBack }) {
 
   const [debugError, setDebugError] = useState("");
 
-const fetchData = useCallback(async () => {
-  setLoading(true);
-  try {
-    const [prodRes, salesRes] = await Promise.allSettled([
-      api.get("/products/"),
-      api.get("/sales/"),
-    ]);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [prodRes, salesRes] = await Promise.allSettled([
+        api.get("/products/"),
+        api.get("/sales/"),
+      ]);
 
-    if (prodRes.status === "fulfilled") {
-      const rawProducts = prodRes.value.data;
-      const prodList = Array.isArray(rawProducts)
-        ? rawProducts
-        : rawProducts?.results || [];
-      setProducts(prodList);
-    } else {
-      console.error("Failed to load products:", prodRes.reason);
-    }
+      if (prodRes.status === "fulfilled") {
+        const rawProducts = prodRes.value.data;
+        const prodList = Array.isArray(rawProducts)
+          ? rawProducts
+          : rawProducts?.results || [];
+        setProducts(prodList);
+      } else {
+        console.error("Failed to load products:", prodRes.reason);
+      }
 
-    if (salesRes.status === "fulfilled") {
-      const rawSales = salesRes.value.data;
-      const salesList = Array.isArray(rawSales)
-        ? rawSales
-        : rawSales?.results || [];
-      setSales(salesList);
-    } else {
-      console.error("Failed to load sales:", salesRes.reason);
+      if (salesRes.status === "fulfilled") {
+        const rawSales = salesRes.value.data;
+        const salesList = Array.isArray(rawSales)
+          ? rawSales
+          : rawSales?.results || [];
+        setSales(salesList);
+      } else {
+        console.error("Failed to load sales:", salesRes.reason);
+      }
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setDebugError(err.message || "Failed to fetch inventory data.");
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error("Error fetching data:", err);
-    setDebugError(err.message || "Failed to fetch inventory data.");
-  } finally {
-    setLoading(false);
-  }
-}, []);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -112,7 +112,8 @@ const fetchData = useCallback(async () => {
     }
 
     try {
-      const response = await api.post("/auth/products/", {
+      // FIX: Changed endpoint from /auth/products/ to /products/
+      const response = await api.post("/products/", {
         id: productForm.id.trim(),
         name: productForm.name,
         category: productForm.category,
@@ -152,7 +153,8 @@ const fetchData = useCallback(async () => {
       return;
 
     try {
-      await api.delete(`/auth/products/${productId}/`);
+      // FIX: Changed endpoint from /auth/products/ to /products/
+      await api.delete(`/products/${productId}/`);
       setStatusMsg({ text: "Product deleted successfully!", isError: false });
       fetchData();
     } catch (err) {
@@ -192,7 +194,8 @@ const fetchData = useCallback(async () => {
       const parsedQty = parseInt(saleForm.quantity, 10);
       const parsedPrice = parseFloat(saleForm.unit_price);
 
-      const response = await api.post("/auth/sales/", {
+      // FIX: Changed endpoint from /auth/sales/ to /sales/
+      const response = await api.post("/sales/", {
         product_id: saleForm.product_id,
         quantity: parsedQty,
         unit_price: parsedPrice,
@@ -286,7 +289,6 @@ const fetchData = useCallback(async () => {
       const { key, direction } = salesSortConfig;
       let aVal, bVal;
 
-      // FIX: Handle product_id fallback between s.product_id and s.product
       if (key === "product_id") {
         aVal = a.product_id ?? a.product ?? "";
         bVal = b.product_id ?? b.product ?? "";
@@ -842,17 +844,15 @@ const fetchData = useCallback(async () => {
                     processedSales.map((s) => (
                       <tr key={s.id}>
                         <td className="id-badge">{s.id}</td>
-<td className="font-semibold">
-  {s.product_name ? (
-    (s.product_id || s.product) ? (
-      `${s.product_name} (${s.product_id || s.product})`
-    ) : (
-      s.product_name
-    )
-  ) : (
-    s.product_id || s.product || "Deleted Product"
-  )}
-</td>
+                        <td className="font-semibold">
+                          {s.product_name
+                            ? s.product_id || s.product
+                              ? `${s.product_name} (${
+                                  s.product_id || s.product
+                                })`
+                              : s.product_name
+                            : s.product_id || s.product || "Deleted Product"}
+                        </td>
                         <td>{s.quantity}</td>
                         <td>${parseFloat(s.unit_price || 0).toFixed(2)}</td>
                         <td className="price-highlight">
