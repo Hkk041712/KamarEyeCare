@@ -151,11 +151,18 @@ def manage_products(request, product_id=None):
         return Response(data, status=status.HTTP_200_OK)
 
     elif request.method == 'POST':
+        custom_id = (request.data.get('id') or '').strip()
         name = request.data.get('name')
         category = request.data.get('category', 'Frames')
 
+        if not custom_id:
+            return Response({'error': 'Product ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
         if not name:
             return Response({'error': 'Name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if Product.objects.filter(id=custom_id).exists():
+            return Response({'error': f'Product with ID "{custom_id}" already exists.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Parse and sanitize numerical inputs strictly
         try:
@@ -170,7 +177,7 @@ def manage_products(request, product_id=None):
             return Response({'error': 'Invalid format for price or quantity.'}, status=status.HTTP_400_BAD_REQUEST)
 
         product = Product.objects.create(
-            id=generate_product_id(),
+            id=custom_id,
             name=name,
             category=category,
             quantity=quantity,
@@ -188,7 +195,9 @@ def manage_products(request, product_id=None):
             product.delete()
             return Response({'message': f'Product {product_id} deleted successfully.'}, status=status.HTTP_200_OK)
         except Product.DoesNotExist:
+            
             return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
+        
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def manage_sales(request):

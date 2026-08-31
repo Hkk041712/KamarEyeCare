@@ -7,6 +7,7 @@ export default function ManageProducts({ onBack }) {
   const [activeTab, setActiveTab] = useState("view");
 
   const [productForm, setProductForm] = useState({
+    id: "",
     name: "",
     category: "Frames",
     quantity: "",
@@ -101,6 +102,7 @@ export default function ManageProducts({ onBack }) {
 
     try {
       const response = await api.post("/auth/products/", {
+        id: productForm.id.trim(),
         name: productForm.name,
         category: productForm.category,
         quantity: parseInt(productForm.quantity, 10),
@@ -113,6 +115,7 @@ export default function ManageProducts({ onBack }) {
         isError: false,
       });
       setProductForm({
+        id: "",
         name: "",
         category: "Frames",
         quantity: "",
@@ -313,7 +316,6 @@ export default function ManageProducts({ onBack }) {
         backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.55), rgba(15, 23, 42, 0.55)), url(${bgImage})`,
       }}
     >
-      {/* Red banner placed inside the JSX return statement */}
       {debugError && (
         <div
           style={{
@@ -400,6 +402,19 @@ export default function ManageProducts({ onBack }) {
 
             <form onSubmit={handleAddProduct} className="products-form">
               <div className="form-grid">
+                <div className="input-group">
+                  <label className="input-label">Product ID</label>
+                  <input
+                    type="text"
+                    name="id"
+                    className="products-input"
+                    value={productForm.id}
+                    onChange={handleInputChange}
+                    placeholder="e.g. PRD1001"
+                    required
+                  />
+                </div>
+
                 <div className="input-group">
                   <label className="input-label">Product Name</label>
                   <input
