@@ -1,0 +1,42 @@
+Kamar Eye Care — Project Description
+
+Kamar Eye Care is a private web-based management system designed for a local optical/eye-care market. The system will replace manual record keeping with a simple, centralized application that allows the owner and authorized employees to manage patients, products, sales, expenses, and financial information.
+
+The application will be accessible through a web browser and will require authentication. Only authorized users will be able to access the system. The owner will have the highest level of permission and will be able to manage employee/admin accounts, while other authorized employees will have access to the operational features according to their assigned permissions.
+
+
+Technology Stack
+Backend
+
+Python + Django
+
+Django will handle:
+
+Authentication
+User management
+Permissions
+Database models
+Business logic
+REST API
+Data validation
+Communication with the database
+
+Django REST Framework will be used to provide the API consumed by the React frontend.
+
+Frontend
+
+React + Vanilla CSS
+
+React will handle:
+
+User interface
+Navigation
+Forms
+Tables
+Dashboards
+API communication
+Authentication state
+
+Vanilla CSS will be used for the visual design instead of a CSS framework.
+
+Database: MYSQL
