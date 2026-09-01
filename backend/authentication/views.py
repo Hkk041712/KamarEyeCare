@@ -60,18 +60,21 @@ def login_view(request):
         return Response({'error': "An internal error occurred. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# views.py
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 @throttle_classes([AuthRateThrottle])
 def request_password_reset_otp(request):
-    username = (request.data.get('username') or '').strip().lower()
+    username = (request.data.get('username') or request.data.get('email') or '').strip().lower()
     if not username:
-        return Response({'error': 'Email address is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Email address or username is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Use iexact to ensure case-insensitive email match
+    # Search by case-insensitive username match
     user = User.objects.filter(username__iexact=username).first()
+    
     if not user:
-        # Return generic success response to prevent username enumeration
+        # Generic response to prevent username enumeration
         return Response({'message': 'If the account exists, an OTP code has been sent.'}, status=status.HTTP_200_OK)
 
     otp = f"{random.randint(100000, 999999)}"
@@ -87,6 +90,7 @@ def request_password_reset_otp(request):
             recipient_list=[user.username],
             fail_silently=False,
         )
+        logger.info(f"OTP successfully sent to {user.username}")
     except Exception as e:
         logger.error(f"Email failure sending OTP to {user.username}: {str(e)}", exc_info=True)
         return Response({'error': 'Failed to send OTP email. Please check server email setup.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
