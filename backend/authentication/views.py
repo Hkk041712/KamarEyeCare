@@ -249,7 +249,11 @@ def manage_sales(request, sale_id=None):
             sale.delete()
             return Response({'message': f'Sale {sale_id} deleted successfully.'}, status=status.HTTP_200_OK)
         except Sale.DoesNotExist:
-            return Response({'error': 'Sale record not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': f'Sale record "{sale_id}" not found.'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error deleting sale {sale_id}: {str(e)}", exc_info=True)
+            return Response({'error': f'Failed to delete sale: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @api_view(['GET', 'POST', 'DELETE'])

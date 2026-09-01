@@ -165,24 +165,39 @@ export default function ManageProducts({ onBack }) {
     }
   };
 
-  const handleDeleteSale = async (saleId) => {
-    if (!window.confirm(`Are you sure you want to delete sale #${saleId}?`)) {
-      return;
-    }
+const handleDeleteSale = async (saleId) => {
+  if (!saleId) {
+    alert("Invalid Sale ID.");
+    return;
+  }
 
-    try {
-      await api.delete(`/sales/${saleId}/`);
-      setStatusMsg({ text: "Sale transaction deleted!", isError: false });
-      fetchData();
-    } catch (err) {
-      const msg =
-        err.response?.data?.detail ||
-        err.response?.data?.error ||
-        "Failed to delete sale transaction.";
-      alert(msg);
-      setDebugError(msg);
-    }
-  };
+  if (!window.confirm(`Are you sure you want to delete sale #${saleId}?`)) {
+    return;
+  }
+
+  try {
+    // Ensure saleId is trimmed and formatted cleanly
+    const cleanId = String(saleId).trim();
+    const response = await api.delete(`/sales/${cleanId}/`);
+
+    setStatusMsg({
+      text: response.data?.message || "Sale transaction deleted!",
+      isError: false,
+    });
+    fetchData();
+  } catch (err) {
+    console.error("Delete sale error response:", err.response);
+    const msg =
+      err.response?.data?.error ||
+      err.response?.data?.detail ||
+      `Failed to delete sale transaction (${
+        err.response?.status || "Network Error"
+      }).`;
+
+    alert(msg);
+    setDebugError(msg);
+  }
+};
 
   // Auto-lookup Product by ID on text change
   const handleProductIdChange = (e) => {
