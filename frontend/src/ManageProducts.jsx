@@ -112,7 +112,6 @@ export default function ManageProducts({ onBack }) {
     }
 
     try {
-      // FIX: Changed endpoint from /auth/products/ to /products/
       const response = await api.post("/products/", {
         id: productForm.id.trim(),
         name: productForm.name,
@@ -153,7 +152,6 @@ export default function ManageProducts({ onBack }) {
       return;
 
     try {
-      // FIX: Changed endpoint from /auth/products/ to /products/
       await api.delete(`/products/${productId}/`);
       setStatusMsg({ text: "Product deleted successfully!", isError: false });
       fetchData();
@@ -167,14 +165,18 @@ export default function ManageProducts({ onBack }) {
     }
   };
 
-  const handleProductSelect = (e) => {
-    const prodId = e.target.value;
-    const prod = products.find((p) => String(p.id) === String(prodId));
+  // Auto-lookup Product by ID on text change
+  const handleProductIdChange = (e) => {
+    const prodId = e.target.value.trim();
+    const prod = products.find(
+      (p) => String(p.id).toLowerCase() === prodId.toLowerCase()
+    );
+
     setSelectedProduct(prod || null);
     setSaleForm((prev) => ({
       ...prev,
-      product_id: prodId,
-      unit_price: prod ? prod.sell_price : "",
+      product_id: e.target.value,
+      unit_price: prod ? prod.sell_price : prev.unit_price,
     }));
   };
 
@@ -182,9 +184,9 @@ export default function ManageProducts({ onBack }) {
     e.preventDefault();
     setStatusMsg({ text: "", isError: false });
 
-    if (!saleForm.product_id) {
+    if (!saleForm.product_id.trim()) {
       setStatusMsg({
-        text: "Please select a product from inventory.",
+        text: "Please enter a valid Product ID.",
         isError: true,
       });
       return;
@@ -194,9 +196,8 @@ export default function ManageProducts({ onBack }) {
       const parsedQty = parseInt(saleForm.quantity, 10);
       const parsedPrice = parseFloat(saleForm.unit_price);
 
-      // FIX: Changed endpoint from /auth/sales/ to /sales/
       const response = await api.post("/sales/", {
-        product_id: saleForm.product_id,
+        product_id: saleForm.product_id.trim(),
         quantity: parsedQty,
         unit_price: parsedPrice,
         created_at: saleForm.created_at,
@@ -651,25 +652,27 @@ export default function ManageProducts({ onBack }) {
             <form onSubmit={handleAddSale} className="products-form">
               <div className="form-grid">
                 <div className="input-group">
-                  <label className="input-label">Select Item Name</label>
-                  <select
+                  <label className="input-label">Product ID</label>
+                  <input
+                    type="text"
                     className="products-input"
+                    placeholder="Enter Product ID (e.g. PRD1001)"
                     value={saleForm.product_id}
-                    onChange={handleProductSelect}
+                    onChange={handleProductIdChange}
                     required
-                  >
-                    <option value="">Select Product</option>
-                    {products.map((p) => (
-                      <option
-                        key={p.id}
-                        value={p.id}
-                        disabled={p.quantity <= 0}
-                      >
-                        {p.name} ({p.quantity} available - $
-                        {parseFloat(p.sell_price || 0).toFixed(2)})
-                      </option>
-                    ))}
-                  </select>
+                  />
+                  {selectedProduct && (
+                    <span
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "#34d399",
+                        marginTop: "4px",
+                      }}
+                    >
+                      Found: {selectedProduct.name} ({selectedProduct.quantity}{" "}
+                      units in stock)
+                    </span>
+                  )}
                 </div>
 
                 <div className="input-group">
