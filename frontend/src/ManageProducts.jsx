@@ -165,6 +165,25 @@ export default function ManageProducts({ onBack }) {
     }
   };
 
+  const handleDeleteSale = async (saleId) => {
+    if (!window.confirm(`Are you sure you want to delete sale #${saleId}?`)) {
+      return;
+    }
+
+    try {
+      await api.delete(`/sales/${saleId}/`);
+      setStatusMsg({ text: "Sale transaction deleted!", isError: false });
+      fetchData();
+    } catch (err) {
+      const msg =
+        err.response?.data?.detail ||
+        err.response?.data?.error ||
+        "Failed to delete sale transaction.";
+      alert(msg);
+      setDebugError(msg);
+    }
+  };
+
   // Auto-lookup Product by ID on text change
   const handleProductIdChange = (e) => {
     const prodId = e.target.value.trim();
@@ -828,18 +847,19 @@ export default function ManageProducts({ onBack }) {
                       Transaction Date
                       {getSortIndicator(salesSortConfig, "created_at")}
                     </th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan="6" className="table-empty">
+                      <td colSpan="7" className="table-empty">
                         Loading sales history...
                       </td>
                     </tr>
                   ) : processedSales.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="table-empty">
+                      <td colSpan="7" className="table-empty">
                         No sales matching your criteria.
                       </td>
                     </tr>
@@ -866,6 +886,14 @@ export default function ManageProducts({ onBack }) {
                         </td>
                         <td>
                           {s.created_at ? s.created_at.split("T")[0] : "N/A"}
+                        </td>
+                        <td>
+                          <button
+                            className="btn-delete-product"
+                            onClick={() => handleDeleteSale(s.id)}
+                          >
+                            Delete
+                          </button>
                         </td>
                       </tr>
                     ))
