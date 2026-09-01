@@ -108,52 +108,54 @@ function AuthCard() {
     return null;
   };
 
-const handleLogin = async (e) => {
-  e.preventDefault();
-  setMessage("");
-  setIsError(false);
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setMessage("");
+    setIsError(false);
 
-  const emailError = validateEmailFormat(username);
-  if (emailError) {
-    setMessage(`Validation Error: ${emailError}`);
-    setIsError(true);
-    return;
-  }
-
-  try {
-    const res = await api.post("/auth/login/", {
-      username,
-      password,
-    });
-    localStorage.setItem("accessToken", res.data.access);
-    localStorage.setItem("refreshToken", res.data.refresh);
-
-    if (rememberMe) {
-      localStorage.setItem("rememberMe", "true");
-      localStorage.setItem("savedUsername", username);
-    } else {
-      localStorage.removeItem("rememberMe");
-      localStorage.removeItem("savedUsername");
+    const emailError = validateEmailFormat(username);
+    if (emailError) {
+      setMessage(`Validation Error: ${emailError}`);
+      setIsError(true);
+      return;
     }
 
-    navigate("/dashboard");
-  } catch (err) {
-    console.error("Login Error details:", err);
+    try {
+      const res = await api.post("/auth/login/", {
+        username,
+        password,
+      });
+      localStorage.setItem("accessToken", res.data.access);
+      localStorage.setItem("refreshToken", res.data.refresh);
 
-    if (err.code === "ERR_NETWORK") {
-      setMessage(
-        "Server connection failed. If Render was asleep, please wait 30 seconds and try again."
-      );
-    } else {
-      setMessage(
-        err.response?.data?.detail ||
-          err.response?.data?.error ||
-          "Login failed. Check your credentials."
-      );
+      if (rememberMe) {
+        localStorage.setItem("rememberMe", "true");
+        localStorage.setItem("savedUsername", username);
+      } else {
+        localStorage.removeItem("rememberMe");
+        localStorage.removeItem("savedUsername");
+      }
+
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Login Error details:", err);
+
+      if (err.code === "ERR_NETWORK") {
+        setMessage(
+          "Server connection failed. If Render was asleep, please wait 30 seconds and try again."
+        );
+      } else {
+        setMessage(
+          err.response?.data?.detail ||
+            err.response?.data?.error ||
+            "Login failed. Check your credentials."
+        );
+      }
+      setIsError(true);
     }
-    setIsError(true);
-  }
-};
+  };
+
+  // App.jsx
 
   const handleRequestOTP = async (e) => {
     e.preventDefault();
@@ -169,12 +171,17 @@ const handleLogin = async (e) => {
 
     try {
       const res = await api.post("/auth/request-reset-otp/", {
-        username: resetEmail,
+        username: resetEmail.trim().toLowerCase(),
       });
-      setMessage(res.data.message);
+      setMessage(res.data.message || "OTP sent to your email.");
+      setIsError(false);
       setResetStep(2);
     } catch (err) {
-      setMessage(err.response?.data?.error || "Failed to send OTP code.");
+      const errorMsg =
+        err.response?.data?.error ||
+        err.response?.data?.detail ||
+        "Failed to send OTP code. Please try again later.";
+      setMessage(errorMsg);
       setIsError(true);
     }
   };
@@ -184,6 +191,12 @@ const handleLogin = async (e) => {
     setMessage("");
     setIsError(false);
 
+    if (!otpCode || otpCode.trim().length !== 6) {
+      setMessage("Please enter a valid 6-digit OTP code.");
+      setIsError(true);
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       setMessage("Passwords do not match.");
       setIsError(true);
@@ -191,22 +204,26 @@ const handleLogin = async (e) => {
     }
 
     try {
-      await api.post("/auth/confirm-reset/", {
-        username: resetEmail,
-        otp: otpCode,
+      const res = await api.post("/auth/confirm-reset/", {
+        username: resetEmail.trim().toLowerCase(),
+        otp: otpCode.trim(),
         new_password: newPassword,
       });
 
-      setMessage("Password updated successfully! You can now log in.");
+      setMessage(
+        res.data.message || "Password updated successfully! You can now log in."
+      );
       setIsError(false);
       setTimeout(() => {
         setResetStep(1);
         setView("login");
       }, 2000);
     } catch (err) {
-      setMessage(
-        err.response?.data?.error || "Reset failed. Invalid or expired OTP."
-      );
+      const errorMsg =
+        err.response?.data?.error ||
+        err.response?.data?.detail ||
+        "Reset failed. Invalid or expired OTP.";
+      setMessage(errorMsg);
       setIsError(true);
     }
   };
