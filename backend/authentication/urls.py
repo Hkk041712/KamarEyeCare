@@ -1,8 +1,11 @@
+# urls.py
 from django.urls import path
+from django.http import HttpResponse
 from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
 
 urlpatterns = [
+    path('', lambda request: HttpResponse("OK"), name='health_check'),  
     path('auth/login/', views.login_view, name='login'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/request-reset-otp/', views.request_password_reset_otp, name='request_reset_otp'),
