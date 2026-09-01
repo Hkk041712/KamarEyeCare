@@ -1,14 +1,10 @@
-import uuid
-import random
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
-from django.core.mail import send_mail
-from django.conf import settings
 from django.db import transaction
-from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.hashers import check_password
 from django.core.paginator import Paginator
 
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
@@ -18,13 +14,10 @@ from rest_framework import status
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
-import threading
-
 from .models import (
     User, Product, Sale, Patient, Expense,
     generate_product_id, generate_sale_id, generate_patient_id
 )
-from .serializers import ExpenseSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -60,89 +53,6 @@ def login_view(request):
     except Exception as e:
         logger.error(f"Login error: {str(e)}")
         return Response({'error': "An internal error occurred. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-# authentication/views.py
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-@throttle_classes([AuthRateThrottle])
-def request_password_reset_otp(request):
-    username = (request.data.get('username') or request.data.get('email') or '').strip().lower()
-    if not username:
-        return Response({'error': 'Email address or username is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    user = User.objects.filter(username__iexact=username).first()
-    
-    # If user doesn't exist, return 200 for security, but log it
-    if not user:
-        logger.warning(f"OTP requested for non-existent user: {username}")
-        return Response({'message': 'If the account exists, an OTP code has been sent.'}, status=status.HTTP_200_OK)
-
-    otp = f"{random.randint(100000, 999999)}"
-    user.reset_otp = make_password(otp)
-    user.reset_otp_created_at = timezone.now()
-    user.save()
-
-    # PRINT OTP TO LOGS (So you can see it on Render regardless of email status)
-    print(f"\n==========================================")
-    print(f" GENERATED OTP FOR {user.username}: {otp}")
-    print(f"==========================================\n", flush=True)
-
-    def send_email_async(subject, message, from_email, recipient_list):
-        try:
-            send_mail(
-                subject=subject,
-                message=message,
-                from_email=from_email,
-                recipient_list=recipient_list,
-                fail_silently=False,
-            )
-            print(f"[EMAIL SUCCESS] Sent OTP to {recipient_list[0]}", flush=True)
-        except Exception as e:
-            print(f"[EMAIL ERROR] Failed to send email to {recipient_list[0]}: {str(e)}", flush=True)
-
-    threading.Thread(
-        target=send_email_async,
-        args=(
-            "Kamar Eye Care - Password Reset OTP",
-            f"Your verification code is: {otp}\n\nThis code will expire in 10 minutes.",
-            settings.DEFAULT_FROM_EMAIL,
-            [user.username]
-        )
-    ).start()
-
-    return Response({'message': 'If the account exists, an OTP code has been sent.'}, status=status.HTTP_200_OK)
-
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-@throttle_classes([AuthRateThrottle])
-def confirm_password_reset(request):
-    username = (request.data.get('username') or '').strip().lower()
-    otp = request.data.get('otp', '').strip()
-    new_password = request.data.get('new_password', '')
-
-    if not username or not otp or not new_password:
-        return Response({'error': 'All fields (email, OTP, new password) are required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    user = User.objects.filter(username__iexact=username).first()
-    if not user or not user.reset_otp:
-        return Response({'error': 'Invalid OTP code or email.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    if user.reset_otp_created_at and (timezone.now() - user.reset_otp_created_at > timedelta(minutes=10)):
-        user.reset_otp = None
-        user.reset_otp_created_at = None
-        user.save()
-        return Response({'error': 'OTP code has expired. Please request a new one.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    if not check_password(otp, user.reset_otp):
-        return Response({'error': 'Invalid OTP code or email.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    user.password_hash = make_password(new_password)
-    user.reset_otp = None
-    user.reset_otp_created_at = None
-    user.save()
-
-    return Response({'message': 'Password updated successfully.'}, status=status.HTTP_200_OK)
 
 
 @api_view(['GET', 'POST', 'DELETE'])
@@ -182,7 +92,6 @@ def manage_products(request, product_id=None):
 
             return Response(data, status=status.HTTP_200_OK)
 
-        # views.py - inside manage_products (POST branch)
         elif request.method == 'POST':
             custom_id = (request.data.get('id') or '').strip()
             name = request.data.get('name')
@@ -191,11 +100,10 @@ def manage_products(request, product_id=None):
             if not name:
                 return Response({'error': 'Name is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Auto-generate ID if omitted or blank
             if not custom_id:
                 custom_id = generate_product_id()
 
-            if Product.objects.filter(id=custom_id).exists():
+            if Product.objects.filter(id__iexact=custom_id).exists():
                 return Response({'error': f'Product with ID "{custom_id}" already exists.'}, status=status.HTTP_400_BAD_REQUEST)
 
             try:
@@ -262,7 +170,7 @@ def manage_sales(request):
         return Response(data, status=status.HTTP_200_OK)
 
     elif request.method == 'POST':
-        product_id = request.data.get('product_id')
+        product_id = str(request.data.get('product_id', '')).strip()
         raw_date = request.data.get('created_at')
 
         if not product_id:
@@ -284,19 +192,19 @@ def manage_sales(request):
                 return Response({'error': 'Invalid date format. Expected YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            product = Product.objects.get(id=product_id)
+            product = Product.objects.get(id__iexact=product_id)
         except Product.DoesNotExist:
-            return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': f'Product with ID "{product_id}" not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         if product.quantity < quantity:
             return Response(
-                {'error': f'Insufficient stock. Only {product.quantity} items available.'},
+                {'error': f'Insufficient stock for product "{product.id}". Only {product.quantity} items available.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
             with transaction.atomic():
-                product_to_update = Product.objects.select_for_update().get(id=product_id)
+                product_to_update = Product.objects.select_for_update().get(id=product.id)
 
                 if product_to_update.quantity < quantity:
                     return Response(
@@ -320,7 +228,7 @@ def manage_sales(request):
 
                 if product_to_update.quantity == 0:
                     prod_name = product_to_update.name
-                    product_to_update.delete()  # Deletes product from DB; ForeignKey becomes NULL, product_name remains
+                    product_to_update.delete()
                     msg = f'Sale recorded! Stock for {prod_name} reached 0 and item was removed from inventory.'
                 else:
                     product_to_update.save()

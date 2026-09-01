@@ -5,8 +5,6 @@ from . import views
 urlpatterns = [
     path('auth/login/', views.login_view, name='login'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('auth/request-reset-otp/', views.request_password_reset_otp, name='request_reset_otp'),
-    path('auth/confirm-reset/', views.confirm_password_reset, name='confirm_reset'),
     path('products/', views.manage_products, name='manage_products'),
     path('products/<str:product_id>/', views.manage_products, name='delete_product'),
     path('sales/', views.manage_sales, name='manage_sales'),

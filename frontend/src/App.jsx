@@ -68,10 +68,9 @@ const BrandHeader = ({ subtitle }) => (
   </div>
 );
 
-// Auth Card Component holding Login & Forgot Password
+// Auth Card Component
 function AuthCard() {
   const navigate = useNavigate();
-  const [view, setView] = useState("login");
 
   const [rememberMe, setRememberMe] = useState(
     () => localStorage.getItem("rememberMe") === "true"
@@ -82,23 +81,15 @@ function AuthCard() {
   const [password, setPassword] = useState("");
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
-  const [resetStep, setResetStep] = useState(1);
-  const [resetEmail, setResetEmail] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
 
   // Auto-redirect if already logged in
   useEffect(() => {
-    if (localStorage.getItem("accessToken") && view === "login") {
+    if (localStorage.getItem("accessToken")) {
       navigate("/dashboard");
     }
-  }, [navigate, view]);
+  }, [navigate]);
 
   const validateEmailFormat = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -155,94 +146,6 @@ function AuthCard() {
     }
   };
 
-  // App.jsx
-
-const handleRequestOTP = async (e) => {
-  e.preventDefault();
-  setMessage("");
-  setIsError(false);
-
-  const emailError = validateEmailFormat(resetEmail);
-  if (emailError) {
-    setMessage(`Validation Error: ${emailError}`);
-    setIsError(true);
-    return;
-  }
-
-  try {
-    const res = await api.post("/auth/request-reset-otp/", {
-      username: resetEmail.trim().toLowerCase(),
-    });
-    setMessage(res.data.message || "OTP sent to your email.");
-    setIsError(false);
-    setResetStep(2);
-  } catch (err) {
-    // Print detailed error objects and response to the browser console
-    console.error("Request OTP Error Full Details:", err);
-    console.error("Server Response Data:", err.response?.data);
-    console.error("HTTP Status Code:", err.response?.status);
-
-    const errorMsg =
-      err.response?.data?.error ||
-      err.response?.data?.detail ||
-      (err.code === "ERR_NETWORK"
-        ? "Network Error: Could not reach the server. Check your endpoint URL or CORS configuration."
-        : `Error (${err.response?.status || "Unknown"}): ${err.message}`);
-
-    setMessage(errorMsg);
-    setIsError(true);
-  }
-};
-
-const handleConfirmReset = async (e) => {
-  e.preventDefault();
-  setMessage("");
-  setIsError(false);
-
-  if (!otpCode || otpCode.trim().length !== 6) {
-    setMessage("Please enter a valid 6-digit OTP code.");
-    setIsError(true);
-    return;
-  }
-
-  if (newPassword !== confirmPassword) {
-    setMessage("Passwords do not match.");
-    setIsError(true);
-    return;
-  }
-
-  try {
-    const res = await api.post("/auth/confirm-reset/", {
-      username: resetEmail.trim().toLowerCase(),
-      otp: otpCode.trim(),
-      new_password: newPassword,
-    });
-
-    setMessage(
-      res.data.message || "Password updated successfully! You can now log in."
-    );
-    setIsError(false);
-    setTimeout(() => {
-      setResetStep(1);
-      setView("login");
-    }, 2000);
-  } catch (err) {
-    // Print detailed error objects and response to the browser console
-    console.error("Confirm Reset Error Full Details:", err);
-    console.error("Server Response Data:", err.response?.data);
-    console.error("HTTP Status Code:", err.response?.status);
-
-    const errorMsg =
-      err.response?.data?.error ||
-      err.response?.data?.detail ||
-      (err.code === "ERR_NETWORK"
-        ? "Network Error: Could not reach the server."
-        : `Reset failed (${err.response?.status || "Error"}): ${err.message}`);
-
-    setMessage(errorMsg);
-    setIsError(true);
-  }
-};
   return (
     <div
       className="auth-page-wrapper"
@@ -251,288 +154,108 @@ const handleConfirmReset = async (e) => {
       }}
     >
       <div className="auth-card">
-        {view === "login" && (
-          <>
-            <BrandHeader />
-            <form onSubmit={handleLogin} className="auth-form">
-              <h2 className="form-subtitle">Portal Login</h2>
+        <BrandHeader />
+        <form onSubmit={handleLogin} className="auth-form">
+          <h2 className="form-subtitle">Portal Login</h2>
 
-              {message && (
-                <div
-                  className={
-                    isError ? "status-msg error-msg" : "status-msg success-msg"
-                  }
-                  style={{
-                    wordBreak: "break-word",
-                    fontSize: "0.8rem",
-                    textAlign: "left",
-                  }}
-                >
-                  {message}
-                </div>
-              )}
+          {message && (
+            <div
+              className={
+                isError ? "status-msg error-msg" : "status-msg success-msg"
+              }
+              style={{
+                wordBreak: "break-word",
+                fontSize: "0.8rem",
+                textAlign: "left",
+              }}
+            >
+              {message}
+            </div>
+          )}
 
-              <div className="input-group">
-                <label htmlFor="login-username" className="input-label">
-                  Username (Email format)
-                </label>
-                <input
-                  id="login-username"
-                  name="username"
-                  autoComplete="username"
-                  type="email"
-                  className="auth-input"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter your email"
-                  required
-                />
-              </div>
+          <div className="input-group">
+            <label htmlFor="login-username" className="input-label">
+              Username (Email format)
+            </label>
+            <input
+              id="login-username"
+              name="username"
+              autoComplete="username"
+              type="email"
+              className="auth-input"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your email"
+              required
+            />
+          </div>
 
-              <div className="input-group">
-                <label className="input-label">Password</label>
-                <div style={{ position: "relative" }}>
-                  <input
-                    id="login-password"
-                    name="password"
-                    autoComplete="current-password"
-                    type={showLoginPassword ? "text" : "password"}
-                    className="auth-input"
-                    style={{ paddingRight: "2.5rem" }}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    style={{
-                      position: "absolute",
-                      right: "0.75rem",
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      background: "none",
-                      border: "none",
-                      color: "#94a3b8",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {showLoginPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
-                  </button>
-                </div>
-              </div>
-
-              <div
+          <div className="input-group">
+            <label className="input-label">Password</label>
+            <div style={{ position: "relative" }}>
+              <input
+                id="login-password"
+                name="password"
+                autoComplete="current-password"
+                type={showLoginPassword ? "text" : "password"}
+                className="auth-input"
+                style={{ paddingRight: "2.5rem" }}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowLoginPassword(!showLoginPassword)}
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  margin: "0.2rem 0 0.8rem 0",
+                  position: "absolute",
+                  right: "0.75rem",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none",
+                  border: "none",
+                  color: "#94a3b8",
+                  cursor: "pointer",
                 }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    id="rememberMe"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    style={{ cursor: "pointer", accentColor: "#0284c7" }}
-                  />
-                  <label
-                    htmlFor="rememberMe"
-                    style={{
-                      fontSize: "0.85rem",
-                      color: "#94a3b8",
-                      cursor: "pointer",
-                      userSelect: "none",
-                    }}
-                  >
-                    Remember me
-                  </label>
-                </div>
-                <button
-                  type="button"
-                  className="btn-link"
-                  style={{ fontSize: "0.82rem", color: "#38bdf8" }}
-                  onClick={() => {
-                    setMessage("");
-                    setIsError(false);
-                    setView("forgot-password");
-                  }}
-                >
-                  Forgot Password?
-                </button>
-              </div>
-
-              <button type="submit" className="btn-primary">
-                Log In
+                {showLoginPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
               </button>
-            </form>
-          </>
-        )}
+            </div>
+          </div>
 
-        {view === "forgot-password" && (
-          <>
-            <BrandHeader subtitle="Reset Access" />
-            {resetStep === 1 ? (
-              <form onSubmit={handleRequestOTP} className="auth-form">
-                <h2 className="form-subtitle">Request Verification Code</h2>
-                {message && (
-                  <div
-                    className={
-                      isError
-                        ? "status-msg error-msg"
-                        : "status-msg success-msg"
-                    }
-                    style={{ fontSize: "0.8rem", textAlign: "left" }}
-                  >
-                    {message}
-                  </div>
-                )}
-                <div className="input-group">
-                  <label className="input-label">Account Email</label>
-                  <input
-                    type="text"
-                    className="auth-input"
-                    value={resetEmail}
-                    onChange={(e) => setResetEmail(e.target.value)}
-                    placeholder="Enter your email"
-                    required
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  style={{ marginTop: "0.5rem" }}
-                >
-                  Send OTP
-                </button>
-                <button
-                  type="button"
-                  className="btn-link"
-                  style={{ marginTop: "0.4rem", alignSelf: "center" }}
-                  onClick={() => setView("login")}
-                >
-                  Back to Login
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleConfirmReset} className="auth-form">
-                <h2 className="form-subtitle">Enter OTP & New Password</h2>
-                {message && (
-                  <div
-                    className={
-                      isError
-                        ? "status-msg error-msg"
-                        : "status-msg success-msg"
-                    }
-                    style={{ fontSize: "0.8rem", textAlign: "left" }}
-                  >
-                    {message}
-                  </div>
-                )}
-                <div className="input-group">
-                  <label className="input-label">6-Digit OTP Code</label>
-                  <input
-                    type="text"
-                    className="auth-input"
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value)}
-                    placeholder="123456"
-                    maxLength={6}
-                    required
-                  />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">New Password</label>
-                  <div style={{ position: "relative" }}>
-                    <input
-                      type={showNewPassword ? "text" : "password"}
-                      className="auth-input"
-                      style={{ paddingRight: "2.5rem" }}
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Enter new password"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                      style={{
-                        position: "absolute",
-                        right: "0.75rem",
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                        background: "none",
-                        border: "none",
-                        color: "#94a3b8",
-                      }}
-                    >
-                      {showNewPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
-                    </button>
-                  </div>
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Confirm New Password</label>
-                  <div style={{ position: "relative" }}>
-                    <input
-                      type={showConfirmPassword ? "text" : "password"}
-                      className="auth-input"
-                      style={{ paddingRight: "2.5rem" }}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Confirm new password"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowConfirmPassword(!showConfirmPassword)
-                      }
-                      style={{
-                        position: "absolute",
-                        right: "0.75rem",
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                        background: "none",
-                        border: "none",
-                        color: "#94a3b8",
-                      }}
-                    >
-                      {showConfirmPassword ? (
-                        <EyeClosedIcon />
-                      ) : (
-                        <EyeOpenIcon />
-                      )}
-                    </button>
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  style={{ marginTop: "0.5rem" }}
-                >
-                  Update Password
-                </button>
-                <button
-                  type="button"
-                  className="btn-link"
-                  style={{ marginTop: "0.4rem", alignSelf: "center" }}
-                  onClick={() => setResetStep(1)}
-                >
-                  Back
-                </button>
-              </form>
-            )}
-          </>
-        )}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              margin: "0.2rem 0 0.8rem 0",
+            }}
+          >
+            <input
+              type="checkbox"
+              id="rememberMe"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              style={{ cursor: "pointer", accentColor: "#0284c7" }}
+            />
+            <label
+              htmlFor="rememberMe"
+              style={{
+                fontSize: "0.85rem",
+                color: "#94a3b8",
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+            >
+              Remember me
+            </label>
+          </div>
+
+          <button type="submit" className="btn-primary">
+            Log In
+          </button>
+        </form>
       </div>
     </div>
   );

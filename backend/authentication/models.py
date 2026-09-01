@@ -20,8 +20,6 @@ class User(models.Model):
     id = models.CharField(max_length=20, primary_key=True)
     username = models.EmailField(unique=True)
     password_hash = models.CharField(max_length=128)
-    reset_otp = models.CharField(max_length=128, null=True, blank=True)
-    reset_otp_created_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'users'
@@ -49,7 +47,7 @@ class Product(models.Model):
 class Sale(models.Model):
     id = models.CharField(max_length=36, primary_key=True, default=generate_sale_id)
     product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True)
-    product_name = models.CharField(max_length=255, blank=True, null=True)  # <-- Added field
+    product_name = models.CharField(max_length=255, blank=True, null=True)
     quantity = models.IntegerField(validators=[MinValueValidator(1)])
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     total = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
