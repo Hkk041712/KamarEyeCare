@@ -157,77 +157,92 @@ function AuthCard() {
 
   // App.jsx
 
-  const handleRequestOTP = async (e) => {
-    e.preventDefault();
-    setMessage("");
+const handleRequestOTP = async (e) => {
+  e.preventDefault();
+  setMessage("");
+  setIsError(false);
+
+  const emailError = validateEmailFormat(resetEmail);
+  if (emailError) {
+    setMessage(`Validation Error: ${emailError}`);
+    setIsError(true);
+    return;
+  }
+
+  try {
+    const res = await api.post("/auth/request-reset-otp/", {
+      username: resetEmail.trim().toLowerCase(),
+    });
+    setMessage(res.data.message || "OTP sent to your email.");
     setIsError(false);
+    setResetStep(2);
+  } catch (err) {
+    // Print detailed error objects and response to the browser console
+    console.error("Request OTP Error Full Details:", err);
+    console.error("Server Response Data:", err.response?.data);
+    console.error("HTTP Status Code:", err.response?.status);
 
-    const emailError = validateEmailFormat(resetEmail);
-    if (emailError) {
-      setMessage(`Validation Error: ${emailError}`);
-      setIsError(true);
-      return;
-    }
+    const errorMsg =
+      err.response?.data?.error ||
+      err.response?.data?.detail ||
+      (err.code === "ERR_NETWORK"
+        ? "Network Error: Could not reach the server. Check your endpoint URL or CORS configuration."
+        : `Error (${err.response?.status || "Unknown"}): ${err.message}`);
 
-    try {
-      const res = await api.post("/auth/request-reset-otp/", {
-        username: resetEmail.trim().toLowerCase(),
-      });
-      setMessage(res.data.message || "OTP sent to your email.");
-      setIsError(false);
-      setResetStep(2);
-    } catch (err) {
-      const errorMsg =
-        err.response?.data?.error ||
-        err.response?.data?.detail ||
-        "Failed to send OTP code. Please try again later.";
-      setMessage(errorMsg);
-      setIsError(true);
-    }
-  };
+    setMessage(errorMsg);
+    setIsError(true);
+  }
+};
 
-  const handleConfirmReset = async (e) => {
-    e.preventDefault();
-    setMessage("");
+const handleConfirmReset = async (e) => {
+  e.preventDefault();
+  setMessage("");
+  setIsError(false);
+
+  if (!otpCode || otpCode.trim().length !== 6) {
+    setMessage("Please enter a valid 6-digit OTP code.");
+    setIsError(true);
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    setMessage("Passwords do not match.");
+    setIsError(true);
+    return;
+  }
+
+  try {
+    const res = await api.post("/auth/confirm-reset/", {
+      username: resetEmail.trim().toLowerCase(),
+      otp: otpCode.trim(),
+      new_password: newPassword,
+    });
+
+    setMessage(
+      res.data.message || "Password updated successfully! You can now log in."
+    );
     setIsError(false);
+    setTimeout(() => {
+      setResetStep(1);
+      setView("login");
+    }, 2000);
+  } catch (err) {
+    // Print detailed error objects and response to the browser console
+    console.error("Confirm Reset Error Full Details:", err);
+    console.error("Server Response Data:", err.response?.data);
+    console.error("HTTP Status Code:", err.response?.status);
 
-    if (!otpCode || otpCode.trim().length !== 6) {
-      setMessage("Please enter a valid 6-digit OTP code.");
-      setIsError(true);
-      return;
-    }
+    const errorMsg =
+      err.response?.data?.error ||
+      err.response?.data?.detail ||
+      (err.code === "ERR_NETWORK"
+        ? "Network Error: Could not reach the server."
+        : `Reset failed (${err.response?.status || "Error"}): ${err.message}`);
 
-    if (newPassword !== confirmPassword) {
-      setMessage("Passwords do not match.");
-      setIsError(true);
-      return;
-    }
-
-    try {
-      const res = await api.post("/auth/confirm-reset/", {
-        username: resetEmail.trim().toLowerCase(),
-        otp: otpCode.trim(),
-        new_password: newPassword,
-      });
-
-      setMessage(
-        res.data.message || "Password updated successfully! You can now log in."
-      );
-      setIsError(false);
-      setTimeout(() => {
-        setResetStep(1);
-        setView("login");
-      }, 2000);
-    } catch (err) {
-      const errorMsg =
-        err.response?.data?.error ||
-        err.response?.data?.detail ||
-        "Reset failed. Invalid or expired OTP.";
-      setMessage(errorMsg);
-      setIsError(true);
-    }
-  };
-
+    setMessage(errorMsg);
+    setIsError(true);
+  }
+};
   return (
     <div
       className="auth-page-wrapper"
