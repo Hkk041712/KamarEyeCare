@@ -60,6 +60,7 @@ def login_view(request):
     except Exception as e:
         logger.error(f"Login error: {str(e)}")
         return Response({'error': "An internal error occurred. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+# authentication/views.py
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -71,8 +72,9 @@ def request_password_reset_otp(request):
 
     user = User.objects.filter(username__iexact=username).first()
     
-    # Always return 200 to prevent account enumeration
+    # If user doesn't exist, return 200 for security, but log it
     if not user:
+        logger.warning(f"OTP requested for non-existent user: {username}")
         return Response({'message': 'If the account exists, an OTP code has been sent.'}, status=status.HTTP_200_OK)
 
     otp = f"{random.randint(100000, 999999)}"
@@ -80,8 +82,10 @@ def request_password_reset_otp(request):
     user.reset_otp_created_at = timezone.now()
     user.save()
 
-    # Log generated OTP for diagnostic purposes
-    logger.info(f"[DEBUG] Generated OTP for {user.username}: {otp}")
+    # PRINT OTP TO LOGS (So you can see it on Render regardless of email status)
+    print(f"\n==========================================")
+    print(f" GENERATED OTP FOR {user.username}: {otp}")
+    print(f"==========================================\n", flush=True)
 
     def send_email_async(subject, message, from_email, recipient_list):
         try:
@@ -92,9 +96,9 @@ def request_password_reset_otp(request):
                 recipient_list=recipient_list,
                 fail_silently=False,
             )
-            logger.info(f"OTP successfully sent to {recipient_list[0]}")
+            print(f"[EMAIL SUCCESS] Sent OTP to {recipient_list[0]}", flush=True)
         except Exception as e:
-            logger.error(f"Async email failure for {recipient_list[0]}: {str(e)}", exc_info=True)
+            print(f"[EMAIL ERROR] Failed to send email to {recipient_list[0]}: {str(e)}", flush=True)
 
     threading.Thread(
         target=send_email_async,
