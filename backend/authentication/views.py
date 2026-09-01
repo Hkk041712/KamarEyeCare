@@ -150,9 +150,9 @@ def manage_products(request, product_id=None):
         return Response({'error': f'Server error processing products: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(['GET', 'POST'])
+@api_view(['GET', 'POST', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def manage_sales(request):
+def manage_sales(request, sale_id=None):
     if request.method == 'GET':
         sales = Sale.objects.all().order_by('-created_at')
         data = [
@@ -239,6 +239,17 @@ def manage_sales(request):
         except Exception as e:
             logger.error(f"Sale processing error: {str(e)}", exc_info=True)
             return Response({'error': f'Failed to process sale: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    elif request.method == 'DELETE':
+        if not sale_id:
+            return Response({'error': 'Sale ID is required for deletion.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            sale = Sale.objects.get(id=sale_id)
+            sale.delete()
+            return Response({'message': f'Sale {sale_id} deleted successfully.'}, status=status.HTTP_200_OK)
+        except Sale.DoesNotExist:
+            return Response({'error': 'Sale record not found.'}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['GET', 'POST', 'DELETE'])
