@@ -245,9 +245,13 @@ def manage_sales(request, sale_id=None):
             return Response({'error': 'Sale ID is required for deletion.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            sale = Sale.objects.get(id=sale_id)
-            sale.delete()
-            return Response({'message': f'Sale {sale_id} deleted successfully.'}, status=status.HTTP_200_OK)
+            with transaction.atomic():
+                # Case-insensitive lookup for string/custom IDs
+                sale = Sale.objects.get(id__iexact=str(sale_id).strip())
+                deleted_id = sale.id
+                sale.delete()
+                return Response({'message': f'Sale transaction {deleted_id} deleted successfully.'}, status=status.HTTP_200_OK)
+
         except Sale.DoesNotExist:
             return Response({'error': f'Sale record "{sale_id}" not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
