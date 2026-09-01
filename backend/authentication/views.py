@@ -18,6 +18,8 @@ from rest_framework import status
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
+import threading
+
 from .models import (
     User, Product, Sale, Patient, Expense,
     generate_product_id, generate_sale_id, generate_patient_id
@@ -59,9 +61,6 @@ def login_view(request):
         logger.error(f"Login error: {str(e)}")
         return Response({'error': "An internal error occurred. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-# views.py
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 @throttle_classes([AuthRateThrottle])
@@ -70,11 +69,9 @@ def request_password_reset_otp(request):
     if not username:
         return Response({'error': 'Email address or username is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Search by case-insensitive username match
     user = User.objects.filter(username__iexact=username).first()
     
     if not user:
-        # Generic response to prevent username enumeration
         return Response({'message': 'If the account exists, an OTP code has been sent.'}, status=status.HTTP_200_OK)
 
     otp = f"{random.randint(100000, 999999)}"
@@ -82,18 +79,28 @@ def request_password_reset_otp(request):
     user.reset_otp_created_at = timezone.now()
     user.save()
 
-    try:
-        send_mail(
-            subject="Kamar Eye Care - Password Reset OTP",
-            message=f"Your verification code is: {otp}\n\nThis code will expire in 10 minutes.",
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.username],
-            fail_silently=False,
+    def send_email_async(subject, message, from_email, recipient_list):
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=from_email,
+                recipient_list=recipient_list,
+                fail_silently=False,
+            )
+            logger.info(f"OTP successfully sent to {recipient_list[0]}")
+        except Exception as e:
+            logger.error(f"Async email failure: {str(e)}", exc_info=True)
+
+    threading.Thread(
+        target=send_email_async,
+        args=(
+            "Kamar Eye Care - Password Reset OTP",
+            f"Your verification code is: {otp}\n\nThis code will expire in 10 minutes.",
+            settings.DEFAULT_FROM_EMAIL,
+            [user.username]
         )
-        logger.info(f"OTP successfully sent to {user.username}")
-    except Exception as e:
-        logger.error(f"Email failure sending OTP to {user.username}: {str(e)}", exc_info=True)
-        return Response({'error': 'Failed to send OTP email. Please check server email setup.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    ).start()
 
     return Response({'message': 'If the account exists, an OTP code has been sent.'}, status=status.HTTP_200_OK)
 
