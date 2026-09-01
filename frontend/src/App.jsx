@@ -241,9 +241,14 @@ const handleLogin = async (e) => {
               )}
 
               <div className="input-group">
-                <label className="input-label">Username (Email format)</label>
+                <label htmlFor="login-username" className="input-label">
+                  Username (Email format)
+                </label>
                 <input
-                  type="text"
+                  id="login-username"
+                  name="username"
+                  autoComplete="username"
+                  type="email"
                   className="auth-input"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -256,6 +261,9 @@ const handleLogin = async (e) => {
                 <label className="input-label">Password</label>
                 <div style={{ position: "relative" }}>
                   <input
+                    id="login-password"
+                    name="password"
+                    autoComplete="current-password"
                     type={showLoginPassword ? "text" : "password"}
                     className="auth-input"
                     style={{ paddingRight: "2.5rem" }}
