@@ -68,8 +68,10 @@ def request_password_reset_otp(request):
     if not username:
         return Response({'error': 'Email address is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = User.objects.filter(username=username).first()
+    # Use iexact to ensure case-insensitive email match
+    user = User.objects.filter(username__iexact=username).first()
     if not user:
+        # Return generic success response to prevent username enumeration
         return Response({'message': 'If the account exists, an OTP code has been sent.'}, status=status.HTTP_200_OK)
 
     otp = f"{random.randint(100000, 999999)}"
@@ -86,8 +88,8 @@ def request_password_reset_otp(request):
             fail_silently=False,
         )
     except Exception as e:
-        logger.error(f"Email failure: {str(e)}")
-        return Response({'error': 'Failed to send OTP email. Please try again.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        logger.error(f"Email failure sending OTP to {user.username}: {str(e)}", exc_info=True)
+        return Response({'error': 'Failed to send OTP email. Please check server email setup.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return Response({'message': 'If the account exists, an OTP code has been sent.'}, status=status.HTTP_200_OK)
 
@@ -103,12 +105,13 @@ def confirm_password_reset(request):
     if not username or not otp or not new_password:
         return Response({'error': 'All fields (email, OTP, new password) are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = User.objects.filter(username=username).first()
+    user = User.objects.filter(username__iexact=username).first()
     if not user or not user.reset_otp:
         return Response({'error': 'Invalid OTP code or email.'}, status=status.HTTP_400_BAD_REQUEST)
 
     if user.reset_otp_created_at and (timezone.now() - user.reset_otp_created_at > timedelta(minutes=10)):
         user.reset_otp = None
+        user.reset_otp_created_at = None
         user.save()
         return Response({'error': 'OTP code has expired. Please request a new one.'}, status=status.HTTP_400_BAD_REQUEST)
 

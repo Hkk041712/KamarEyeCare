@@ -1,12 +1,10 @@
 import axios from 'axios';
 
-// Ensure this matches your backend Django URL structure.
-// If your backend routes are at /api/auth/login/, use 'https://kamareyecare.onrender.com/api'
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://kamareyecare.onrender.com/api';
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 60000, // 60s timeout to handle Render cold starts
+  timeout: 60000, // 60s timeout for cold starts
   headers: {
     'Content-Type': 'application/json',
   },
@@ -74,8 +72,7 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-try {
-      // Ensure path matches Django simplejwt URL configuration
+    try {
       const response = await axios.post(`${BASE_URL}/auth/token/refresh/`, {
         refresh: refreshToken,
       });
@@ -104,8 +101,8 @@ function handleLogout() {
   
   const currentPath = window.location.pathname;
   
-  if (!currentPath.endsWith('/login') && !currentPath.includes('/login')) {
-    window.location.href = `/KamarEyeCare/#/login`;
+  if (!currentPath.includes('/login')) {
+    window.location.href = '/login';
   }
 }
 
