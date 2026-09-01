@@ -99,7 +99,7 @@ class Expense(models.Model):
     created_by = models.CharField(max_length=150, default='Admin')
 
     class Meta:
-        db_table = 'EXPENSES'
+        db_table = 'expenses'  
         ordering = ['-created_at']
 
     def __str__(self):

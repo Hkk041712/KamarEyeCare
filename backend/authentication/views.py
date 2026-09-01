@@ -378,25 +378,48 @@ def manage_patients(request, patient_id=None):
             return Response({'error': 'Patient not found.'}, status=status.HTTP_404_NOT_FOUND)
 
 
-# views.py
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def manage_expenses(request):
     try:
         if request.method == 'GET':
             expenses = Expense.objects.all().order_by('-created_at')
-            serializer = ExpenseSerializer(expenses, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            data = [
+                {
+                    "id": exp.id,
+                    "description": exp.description,
+                    "amount": f"{exp.amount:.2f}" if exp.amount is not None else "0.00",
+                    "created_at": exp.created_at.isoformat() if exp.created_at else None,
+                    "created_by": exp.created_by or "Admin",
+                }
+                for exp in expenses
+            ]
+            return Response(data, status=status.HTTP_200_OK)
 
         elif request.method == 'POST':
-            serializer = ExpenseSerializer(data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(
-                    {"message": "Expense recorded successfully!", "data": serializer.data},
-                    status=status.HTTP_201_CREATED
-                )
-            return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+            description = (request.data.get('description') or '').strip()
+            raw_amount = request.data.get('amount')
+            created_by = (request.data.get('created_by') or 'Admin').strip()
+
+            if not description or raw_amount is None:
+                return Response({'error': 'Description and amount are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                amount = Decimal(str(raw_amount).strip()).quantize(Decimal('0.01'))
+                if amount < Decimal('0.00'):
+                    return Response({'error': 'Amount cannot be negative.'}, status=status.HTTP_400_BAD_REQUEST)
+            except (ValueError, TypeError, InvalidOperation):
+                return Response({'error': 'Invalid amount format.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            expense = Expense.objects.create(
+                description=description,
+                amount=amount,
+                created_by=created_by
+            )
+            return Response(
+                {"message": "Expense recorded successfully!", "id": expense.id},
+                status=status.HTTP_201_CREATED
+            )
 
     except Exception as e:
         logger.error(f"manage_expenses error: {str(e)}", exc_info=True)
