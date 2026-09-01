@@ -71,6 +71,7 @@ def request_password_reset_otp(request):
 
     user = User.objects.filter(username__iexact=username).first()
     
+    # Always return 200 to prevent account enumeration
     if not user:
         return Response({'message': 'If the account exists, an OTP code has been sent.'}, status=status.HTTP_200_OK)
 
@@ -78,6 +79,9 @@ def request_password_reset_otp(request):
     user.reset_otp = make_password(otp)
     user.reset_otp_created_at = timezone.now()
     user.save()
+
+    # Log generated OTP for diagnostic purposes
+    logger.info(f"[DEBUG] Generated OTP for {user.username}: {otp}")
 
     def send_email_async(subject, message, from_email, recipient_list):
         try:
@@ -90,7 +94,7 @@ def request_password_reset_otp(request):
             )
             logger.info(f"OTP successfully sent to {recipient_list[0]}")
         except Exception as e:
-            logger.error(f"Async email failure: {str(e)}", exc_info=True)
+            logger.error(f"Async email failure for {recipient_list[0]}: {str(e)}", exc_info=True)
 
     threading.Thread(
         target=send_email_async,
