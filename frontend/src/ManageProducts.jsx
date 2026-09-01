@@ -176,8 +176,7 @@ const handleDeleteSale = async (saleId) => {
   }
 
   try {
-    // Ensure saleId is trimmed and formatted cleanly
-    const cleanId = String(saleId).trim();
+    const cleanId = encodeURIComponent(String(saleId).trim());
     const response = await api.delete(`/sales/${cleanId}/`);
 
     setStatusMsg({
