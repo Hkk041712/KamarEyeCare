@@ -1,15 +1,15 @@
 @echo off
-title Starting Kamare Eye Care Application...
+setlocal
+title Starting Kamar Eye Care
 
-:: 1. Start Django Backend
-echo Starting Django Backend...
-start "Django Backend" cmd /k "cd /d C:\Users\user\Documents\GitHub\KamarEyeCare\backend && call venv\Scripts\activate && python manage.py runserver"
+set "PROJECT_DIR=%~dp0"
 
-:: 2. Start Frontend Server
-echo Starting Frontend...
-start "React Frontend" cmd /k "cd /d C:\Users\user\Documents\GitHub\KamarEyeCare\frontend && npm run dev"
+echo Starting the Django API...
+start "Kamar Eye Care API" powershell -NoExit -Command "Set-Location -LiteralPath '%PROJECT_DIR%backend'; .\venv\Scripts\python.exe manage.py runserver"
 
-:: 3. Open Application in Browser
-echo Opening App...
-timeout /t 3 >nul
-start http://localhost:5173
+echo Starting the React frontend...
+start "Kamar Eye Care Frontend" powershell -NoExit -Command "Set-Location -LiteralPath '%PROJECT_DIR%frontend'; $env:VITE_API_BASE_URL='http://127.0.0.1:8000/api'; npm run dev"
+
+timeout /t 3 /nobreak >nul
+start "" "http://localhost:5173"
+endlocal

@@ -6,7 +6,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-local-dev-key-kamare-eyecare')
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'dev-only-change-me-before-deploying')
 
 DEBUG = True
 
@@ -105,7 +105,7 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 DATABASES = {
     'default': dj_database_url.config(
-        default='postgres://postgres:password@localhost:5432/kamareyecare',
+        default=f\"sqlite:///{(BASE_DIR / 'kamareyecare.sqlite3').as_posix()}\",
         conn_max_age=600
     )
 }
